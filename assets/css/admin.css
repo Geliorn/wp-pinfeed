@@ -1,0 +1,105 @@
+.wppf-section {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 4px 16px 8px;
+	margin: 16px 0;
+}
+.wppf-section h3 {
+	margin: 12px 0 0;
+}
+.wppf-form .form-table th {
+	width: 220px;
+}
+.wppf-profile.is-new {
+	border-left: 4px solid #2271b1;
+}
+.wppf-inline {
+	display: inline-block;
+	margin: 0 16px 6px 0;
+}
+.wppf-rules {
+	max-width: 900px;
+}
+.wppf-rules td {
+	vertical-align: middle;
+}
+.wppf-remove-rule {
+	color: #b32d2e;
+	text-decoration: none;
+	font-size: 16px;
+}
+.wppf-sortable {
+	margin: 0;
+	max-width: 560px;
+}
+.wppf-sortable li {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	padding: 6px 8px;
+	margin-bottom: 4px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.wppf-sortable .dashicons-menu {
+	cursor: move;
+	color: #8c8f94;
+}
+.wppf-media-preview {
+	display: block;
+	max-width: 120px;
+	max-height: 160px;
+	margin-bottom: 6px;
+	border-radius: 3px;
+}
+.wppf-help {
+	max-width: 760px;
+}
+.wppf-help td:first-child {
+	white-space: nowrap;
+	width: 1%;
+}
+.wppf-warn {
+	color: #b32d2e;
+	font-weight: 600;
+}
+.wppf-ok {
+	color: #00a32a;
+	font-weight: 600;
+}
+.wppf-danger {
+	color: #b32d2e;
+}
+.wppf-preset-layout {
+	display: flex;
+	gap: 24px;
+	align-items: flex-start;
+}
+.wppf-preset-form {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.wppf-preview-pane {
+	flex: 0 0 340px;
+	position: sticky;
+	top: 40px;
+}
+.wppf-preview-box img {
+	width: 100%;
+	height: auto;
+	border-radius: 12px;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, .15);
+}
+@media (max-width: 1100px) {
+	.wppf-preset-layout {
+		flex-direction: column;
+	}
+	.wppf-preview-pane {
+		position: static;
+		flex-basis: auto;
+		width: 100%;
+		max-width: 400px;
+	}
+}
