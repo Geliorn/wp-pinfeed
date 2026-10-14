@@ -70,6 +70,12 @@ class WPPF_Feed_Config {
 			'default_image_id'      => array( 'int', 0 ),
 			// none | always | not_vertical — when to compose a 2:3 pin with GD.
 			'generate_mode'         => array( 'text', 'not_vertical' ),
+			// infographic (heading + numbered points, like llm-agent-articles) | cover
+			'pin_style'             => array( 'text', 'infographic' ),
+			'infographic_preset'    => array( 'text', 'ig-list' ),
+			'infographic_points'    => array( 'int', 5 ),
+			'infographic_source'    => array( 'text', 'auto' ), // auto | llm | structure
+			'infographic_title'     => array( 'text', '{pin_title|llm_title|title}' ),
 			'generate_without_source' => array( 'bool', 1 ),     // text-only pin on the preset background
 			'image_preset'          => array( 'text', 'pin-default' ),
 			'caption_template'      => array( 'text', '{pin_title|title}' ),
@@ -574,15 +580,39 @@ class WPPF_Feed_Config {
 		}
 		echo '</select><p class="description">Pinterest лучше всего показывает пины 2:3 (1000×1500). Горизонтальная обложка в ленте теряется.</p></td></tr>';
 
-		echo '<tr><th>Пресет</th><td><select name="wppf[image_preset]">';
+		echo '<tr><th>Формат пина</th><td><select name="wppf[pin_style]">';
+		foreach ( array(
+			'infographic' => 'Инфографика: заголовок + тезисы (как в статьях)',
+			'cover'       => 'Обложка: картинка + заголовок',
+		) as $v => $l ) {
+			echo '<option value="' . esc_attr( $v ) . '"' . selected( $c['pin_style'], $v, false ) . '>' . esc_html( $l ) . '</option>';
+		}
+		echo '</select><p class="description">Если тезисов набралось меньше трёх, вместо инфографики собирается обложка.</p></td></tr>';
+
+		echo '<tr class="wppf-subhead"><th colspan="2">Инфографика</th></tr>';
+		echo '<tr><th>Пресет инфографики</th><td><select name="wppf[infographic_preset]">';
+		foreach ( WPPF_Infographic_Presets::all() as $id => $preset ) {
+			echo '<option value="' . esc_attr( $id ) . '"' . selected( $c['infographic_preset'], $id, false ) . '>' . esc_html( $preset['name'] . ' (' . WPPF_Infographic_Presets::layouts()[ $preset['layout'] ] . ')' ) . '</option>';
+		}
+		echo '</select> <a href="' . esc_url( admin_url( 'admin.php?page=' . WPPF_Admin::PRESETS_SLUG . '&type=infographic' ) ) . '">Пресеты</a></td></tr>';
+		echo '<tr><th>Откуда тезисы</th><td><select name="wppf[infographic_source]">';
+		foreach ( WPPF_Infographic::sources() as $v => $l ) {
+			echo '<option value="' . esc_attr( $v ) . '"' . selected( $c['infographic_source'], $v, false ) . '>' . esc_html( $l ) . '</option>';
+		}
+		echo '</select><p class="description">Структура: тезисы из метабокса записи → блок «Коротко» (llm-agent-articles) и другие сводные списки → заголовки H2 → самый длинный список. Модель пишет тезисы в фоне, с учётом размера блока в пресете; ключи — в «Настройках», язык и требования — в разделе LLM выше.</p></td></tr>';
+		self::row_number( 'infographic_points', 'Тезисов', $c['infographic_points'], '3–8. На 2:3 с телефона хорошо читаются 5.' );
+		self::row_text( 'infographic_title', 'Заголовок инфографики', $c['infographic_title'], 'Подпись внизу — общая, поле ниже.' );
+
+		echo '<tr class="wppf-subhead"><th colspan="2">Обложка (и запасной вариант)</th></tr>';
+		echo '<tr><th>Пресет обложки</th><td><select name="wppf[image_preset]">';
 		foreach ( $presets as $id => $preset ) {
 			echo '<option value="' . esc_attr( $id ) . '"' . selected( $c['image_preset'], $id, false ) . '>' . esc_html( $preset['name'] . ' (' . $preset['width'] . '×' . $preset['height'] . ')' ) . '</option>';
 		}
-		echo '</select> <a href="' . esc_url( admin_url( 'admin.php?page=' . WPPF_Admin::PRESETS_SLUG ) ) . '">Пресеты</a></td></tr>';
+		echo '</select> <a href="' . esc_url( admin_url( 'admin.php?page=' . WPPF_Admin::PRESETS_SLUG . '&type=cover' ) ) . '">Пресеты</a></td></tr>';
 
-		self::row_checkbox( 'generate_without_source', 'Пин без исходной картинки', $c['generate_without_source'], 'Если ни один источник ничего не дал — собрать текстовый пин на фоне пресета.' );
-		self::row_text( 'caption_template', 'Текст на картинке', $c['caption_template'], 'Те же подстановки, что для текста.' );
-		self::row_text( 'footer_template', 'Подпись внизу', $c['footer_template'], 'Обычно домен сайта. Пусто — без подписи.' );
+		self::row_checkbox( 'generate_without_source', 'Обложка без исходной картинки', $c['generate_without_source'], 'Если ни один источник ничего не дал — собрать текстовую обложку на фоне пресета. Инфографике картинка не нужна.' );
+		self::row_text( 'caption_template', 'Текст на обложке', $c['caption_template'], 'Те же подстановки, что для текста.' );
+		self::row_text( 'footer_template', 'Подпись внизу', $c['footer_template'], 'Для инфографики и обложки. Обычно домен сайта. Пусто — без подписи.' );
 
 		echo '<tr><th>Пока пин не собран</th><td><select name="wppf[pending_fallback]">';
 		foreach ( array(

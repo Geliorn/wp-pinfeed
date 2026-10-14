@@ -120,7 +120,7 @@ class WPPF_Image_Composer {
 
 	// --------------------------------------------------------------- canvas
 
-	private static function new_canvas( $width, $height, $background ) {
+	protected static function new_canvas( $width, $height, $background ) {
 		$canvas = imagecreatetruecolor( max( 1, $width ), max( 1, $height ) );
 		imagealphablending( $canvas, false );
 		imagesavealpha( $canvas, true );
@@ -134,14 +134,14 @@ class WPPF_Image_Composer {
 	}
 
 	/** @param array $rect x, y, w, h */
-	private static function fill_rect( $canvas, array $rect, $hex ) {
+	protected static function fill_rect( $canvas, array $rect, $hex ) {
 		$rgb   = WPPF_Image_Presets::hex_to_rgb( $hex, array( 17, 24, 39 ) );
 		$color = imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], self::GD_OPAQUE );
 		imagefilledrectangle( $canvas, $rect[0], $rect[1], $rect[0] + $rect[2] - 1, $rect[1] + $rect[3] - 1, $color );
 	}
 
 	/** Scales the source to cover (and crops by the focal point) or to contain. */
-	private static function draw_source( $canvas, $source, array $preset ) {
+	protected static function draw_source( $canvas, $source, array $preset ) {
 		$cw = imagesx( $canvas );
 		$ch = imagesy( $canvas );
 		$sw = imagesx( $source );
@@ -204,7 +204,7 @@ class WPPF_Image_Composer {
 
 	// -------------------------------------------------------------- filters
 
-	private static function apply_filters( $canvas, array $preset ) {
+	protected static function apply_filters( $canvas, array $preset ) {
 		if ( $preset['grayscale'] ) {
 			imagefilter( $canvas, IMG_FILTER_GRAYSCALE );
 		}
@@ -219,7 +219,7 @@ class WPPF_Image_Composer {
 		}
 	}
 
-	private static function apply_tint( $canvas, array $preset ) {
+	protected static function apply_tint( $canvas, array $preset ) {
 		$alpha = (int) $preset['tint_alpha'];
 		if ( $alpha < 1 || '' === $preset['tint_hex'] ) {
 			return;
@@ -230,7 +230,7 @@ class WPPF_Image_Composer {
 		imagefilledrectangle( $canvas, 0, 0, imagesx( $canvas ) - 1, imagesy( $canvas ) - 1, $color );
 	}
 
-	private static function apply_gradient( $canvas, array $preset ) {
+	protected static function apply_gradient( $canvas, array $preset ) {
 		if ( ! $preset['gradient_enabled'] ) {
 			return;
 		}
@@ -278,7 +278,7 @@ class WPPF_Image_Composer {
 		}
 	}
 
-	private static function apply_logo( $canvas, array $preset ) {
+	protected static function apply_logo( $canvas, array $preset ) {
 		$attachment_id = (int) $preset['logo_id'];
 		if ( $attachment_id < 1 ) {
 			return;
@@ -322,7 +322,7 @@ class WPPF_Image_Composer {
 	}
 
 	/** Multiplies every pixel's opacity by $factor (0..1), keeping its own alpha shape. */
-	private static function scale_layer_alpha( $layer, $factor ) {
+	protected static function scale_layer_alpha( $layer, $factor ) {
 		$w = imagesx( $layer );
 		$h = imagesy( $layer );
 
@@ -641,7 +641,7 @@ class WPPF_Image_Composer {
 
 	// ------------------------------------------------------- frame & output
 
-	private static function apply_border( $canvas, array $preset ) {
+	protected static function apply_border( $canvas, array $preset ) {
 		$width = (int) $preset['border_width'];
 		if ( $width < 1 ) {
 			return;
@@ -666,7 +666,7 @@ class WPPF_Image_Composer {
 	}
 
 	/** Filled rectangle with rounded corners, on its own layer so the arcs don't double-blend. */
-	private static function rounded_rect( $canvas, $x1, $y1, $x2, $y2, $radius, array $rgb, $alpha_pct ) {
+	protected static function rounded_rect( $canvas, $x1, $y1, $x2, $y2, $radius, array $rgb, $alpha_pct ) {
 		$x1 = max( 0, (int) $x1 );
 		$y1 = max( 0, (int) $y1 );
 		$x2 = min( imagesx( $canvas ) - 1, (int) $x2 );
@@ -704,7 +704,7 @@ class WPPF_Image_Composer {
 		imagedestroy( $layer );
 	}
 
-	private static function save( $canvas, array $preset, $out_path ) {
+	protected static function save( $canvas, array $preset, $out_path ) {
 		$dir = dirname( $out_path );
 		if ( ! wp_mkdir_p( $dir ) ) {
 			return self::fail( 'Не удалось создать каталог для картинки: ' . $dir );
@@ -745,12 +745,12 @@ class WPPF_Image_Composer {
 	}
 
 	/** Percent opacity (0..100) -> GD alpha (127..0). */
-	private static function alpha_to_gd( $percent ) {
+	protected static function alpha_to_gd( $percent ) {
 		$percent = max( 0, min( 100, (float) $percent ) );
 		return (int) round( self::GD_TRANSPARENT * ( 1 - $percent / 100 ) );
 	}
 
-	private static function fail( $error ) {
+	protected static function fail( $error ) {
 		return array(
 			'ok'    => false,
 			'path'  => '',

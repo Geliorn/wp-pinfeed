@@ -39,6 +39,10 @@ class WPPF_Integrations {
 					'description_template' => "{pin_description|llm_description|seo_description|excerpt|content:400}\n\n{hashtags:post_tag:5}",
 					'image_sources'        => array( 'pin_meta', 'thumbnail', 'content', 'term', 'default' ),
 					'generate_mode'        => 'not_vertical',
+					// The «Коротко» block of every article is a ready set of points.
+					'pin_style'            => 'infographic',
+					'infographic_source'   => 'auto',
+					'infographic_preset'   => 'ig-list',
 					'caption_template'     => '{pin_title|title}',
 					'footer_template'      => '{site_domain}',
 					// The article plugin publishes first and attaches the cover
@@ -63,6 +67,12 @@ class WPPF_Integrations {
 					'image_term_taxonomies' => array( 'repo_topic' ),
 					'image_meta_key'       => '_gh_owner_avatar',
 					'generate_mode'        => 'always',
+					// README headings ("Installation", "Usage") make poor points —
+					// the model reads the README instead.
+					'pin_style'            => 'infographic',
+					'infographic_source'   => 'llm',
+					'infographic_preset'   => 'ig-grid',
+					'infographic_title'    => '{pin_title|llm_title|title}',
 					'caption_template'     => '{pin_title|title}',
 					'footer_template'      => '{gh_stars} · {site_domain}',
 				),

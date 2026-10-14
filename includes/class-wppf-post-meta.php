@@ -14,6 +14,7 @@ class WPPF_Post_Meta {
 	const TITLE       = '_wppf_pin_title';
 	const DESCRIPTION = '_wppf_pin_description';
 	const EXCLUDE     = '_wppf_exclude';
+	const THESES      = '_wppf_theses_manual';
 
 	public static function init() {
 		add_action( 'add_meta_boxes', array( __CLASS__, 'add_meta_box' ) );
@@ -46,6 +47,10 @@ class WPPF_Post_Meta {
 		echo '<textarea id="wppf-pin-description" class="widefat" rows="4" maxlength="500" name="wppf_pin_description">' . esc_textarea( (string) get_post_meta( $post->ID, self::DESCRIPTION, true ) ) . '</textarea></p>';
 		echo '<p class="description">Пусто — текст соберётся по шаблону ленты ({pin_title} / {pin_description} в начале цепочки).</p>';
 
+		echo '<p><label for="wppf-theses"><strong>Тезисы для инфографики</strong></label><br>';
+		echo '<textarea id="wppf-theses" class="widefat" rows="5" name="wppf_theses" placeholder="Метка: тезис одним предложением">' . esc_textarea( (string) get_post_meta( $post->ID, self::THESES, true ) ) . '</textarea></p>';
+		echo '<p class="description">По пункту на строку, «Метка: текст» или просто текст. Пусто — тезисы возьмутся из структуры записи или от модели.</p>';
+
 		echo '<p><label><input type="checkbox" name="wppf_exclude" value="1"' . checked( '1', (string) get_post_meta( $post->ID, self::EXCLUDE, true ), false ) . '> Не публиковать в Pinterest</label></p>';
 	}
 
@@ -67,6 +72,7 @@ class WPPF_Post_Meta {
 		self::put( $post_id, self::IMAGE, $image ? $image : '' );
 		self::put( $post_id, self::TITLE, $title );
 		self::put( $post_id, self::DESCRIPTION, $desc );
+		self::put( $post_id, self::THESES, isset( $_POST['wppf_theses'] ) ? sanitize_textarea_field( wp_unslash( $_POST['wppf_theses'] ) ) : '' );
 		self::put( $post_id, self::EXCLUDE, empty( $_POST['wppf_exclude'] ) ? '' : '1' );
 	}
 

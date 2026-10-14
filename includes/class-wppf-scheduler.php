@@ -152,6 +152,15 @@ class WPPF_Scheduler {
 						break 2;
 					}
 
+					// Points first: the infographic can't be drawn without them.
+					if ( $llm_left > 0 && WPPF_Infographic::needs_generation( $post, $config ) ) {
+						$llm_left--;
+						if ( WPPF_Infographic::generate( $post, $config ) ) {
+							$done_llm++;
+							$changed = true;
+						}
+					}
+
 					if ( $llm_left > 0 && WPPF_LLM_Text::needs_generation( $post, $config ) ) {
 						$llm_left--;
 						if ( WPPF_LLM_Text::generate( $post, $config ) ) {
@@ -183,7 +192,7 @@ class WPPF_Scheduler {
 			delete_transient( self::TICK_RUNNING_TRANSIENT );
 		}
 
-		$summary = sprintf( 'Лент: %d, текстов LLM: %d, пинов собрано: %d, %.1f с', $feeds, $done_llm, $done_img, microtime( true ) - $started );
+		$summary = sprintf( 'Лент: %d, ответов LLM (тексты и тезисы): %d, пинов собрано: %d, %.1f с', $feeds, $done_llm, $done_img, microtime( true ) - $started );
 		update_option(
 			self::LAST_TICK_OPTION,
 			array(

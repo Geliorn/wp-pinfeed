@@ -276,7 +276,113 @@ class WPPF_Admin {
 
 	// ------------------------------------------------------------- presets
 
-	private static function preset_labels() {
+	/** cover | infographic — which preset family a request is about. */
+	private static function preset_type( $raw ) {
+		return 'infographic' === $raw ? 'infographic' : 'cover';
+	}
+
+	/** @return string WPPF_Image_Presets or WPPF_Infographic_Presets */
+	private static function preset_class( $type ) {
+		return 'infographic' === $type ? 'WPPF_Infographic_Presets' : 'WPPF_Image_Presets';
+	}
+
+	private static function preset_groups( $type ) {
+		if ( 'infographic' === $type ) {
+			return array(
+				'canvas'  => 'Полотно и фон',
+				'heading' => 'Заголовок',
+				'items'   => 'Тезисы: раскладка и блоки',
+				'text'    => 'Тезисы: маркер и текст',
+				'footer'  => 'Подпись внизу и логотип',
+			);
+		}
+		return array(
+			'canvas'  => 'Полотно',
+			'filters' => 'Картинка: фильтры и слои',
+			'caption' => 'Текст',
+			'footer'  => 'Подпись внизу',
+			'logo'    => 'Логотип и рамка',
+			'output'  => 'Файл',
+		);
+	}
+
+	private static function preset_labels( $type ) {
+		if ( 'infographic' === $type ) {
+			return array(
+				'name'                => array( 'Название', 'canvas' ),
+				'width'               => array( 'Ширина, px', 'canvas' ),
+				'height'              => array( 'Высота, px', 'canvas' ),
+				'padding'             => array( 'Поля, px', 'canvas' ),
+				'background'          => array( 'Цвет фона', 'canvas' ),
+				'background_mode'     => array( 'Фон', 'canvas' ),
+				'fit'                 => array( 'Вписывание картинки фона', 'canvas' ),
+				'focal'               => array( 'Фокус обрезки', 'canvas' ),
+				'grayscale'           => array( 'Фон ч/б', 'canvas' ),
+				'brightness'          => array( 'Яркость фона (−255…255)', 'canvas' ),
+				'blur'                => array( 'Размытие фона, проходов', 'canvas' ),
+				'tint_hex'            => array( 'Затемнение: цвет', 'canvas' ),
+				'tint_alpha'          => array( 'Затемнение: непрозрачность, %', 'canvas' ),
+				'gradient_enabled'    => array( 'Градиент', 'canvas' ),
+				'gradient_direction'  => array( 'Направление градиента', 'canvas' ),
+				'gradient_from_hex'   => array( 'Градиент: цвет в начале', 'canvas' ),
+				'gradient_from_alpha' => array( 'Градиент: непрозрачность в начале, %', 'canvas' ),
+				'gradient_to_hex'     => array( 'Градиент: цвет в конце', 'canvas' ),
+				'gradient_to_alpha'   => array( 'Градиент: непрозрачность в конце, %', 'canvas' ),
+				'font'                => array( 'Шрифт', 'canvas' ),
+				'format'              => array( 'Формат файла', 'canvas' ),
+				'quality'             => array( 'Качество', 'canvas' ),
+				'accent_enabled'      => array( 'Акцентная полоса', 'heading' ),
+				'accent_color'        => array( 'Цвет полосы', 'heading' ),
+				'accent_width'        => array( 'Длина полосы', 'heading' ),
+				'accent_height'       => array( 'Толщина полосы', 'heading' ),
+				'accent_gap'          => array( 'Отступ под полосой', 'heading' ),
+				'title_enabled'       => array( 'Заголовок', 'heading' ),
+				'title_size'          => array( 'Кегль', 'heading' ),
+				'title_min_size'      => array( 'Минимальный кегль', 'heading' ),
+				'title_color'         => array( 'Цвет', 'heading' ),
+				'title_align'         => array( 'Выравнивание', 'heading' ),
+				'title_max_lines'     => array( 'Максимум строк', 'heading' ),
+				'title_line_height'   => array( 'Интерлиньяж', 'heading' ),
+				'title_gap'           => array( 'Отступ под заголовком', 'heading' ),
+				'layout'              => array( 'Раскладка', 'items' ),
+				'columns'             => array( 'Колонок (для сетки)', 'items' ),
+				'gap_x'               => array( 'Зазор по горизонтали', 'items' ),
+				'gap_y'               => array( 'Зазор по вертикали', 'items' ),
+				'plate_enabled'       => array( 'Плашка под пунктом', 'items' ),
+				'plate_color'         => array( 'Цвет плашки', 'items' ),
+				'plate_alpha'         => array( 'Непрозрачность плашки, %', 'items' ),
+				'plate_radius'        => array( 'Скругление', 'items' ),
+				'plate_padding'       => array( 'Внутренний отступ', 'items' ),
+				'plate_border_width'  => array( 'Обводка: толщина', 'items' ),
+				'plate_border_color'  => array( 'Обводка: цвет', 'items' ),
+				'badge_style'         => array( 'Маркер', 'text' ),
+				'badge_size'          => array( 'Размер маркера', 'text' ),
+				'badge_bg'            => array( 'Цвет маркера', 'text' ),
+				'badge_color'         => array( 'Цвет цифры', 'text' ),
+				'badge_gap'           => array( 'Отступ от маркера', 'text' ),
+				'label_enabled'       => array( 'Метка над тезисом (1–3 слова)', 'text' ),
+				'label_size'          => array( 'Кегль метки', 'text' ),
+				'label_color'         => array( 'Цвет метки', 'text' ),
+				'label_uppercase'     => array( 'Метка ПРОПИСНЫМИ', 'text' ),
+				'label_gap'           => array( 'Отступ под меткой', 'text' ),
+				'text_size'           => array( 'Кегль тезиса', 'text' ),
+				'text_min_size'       => array( 'Минимальный кегль тезиса', 'text' ),
+				'text_color'          => array( 'Цвет тезиса', 'text' ),
+				'text_line_height'    => array( 'Интерлиньяж тезиса', 'text' ),
+				'footer_enabled'      => array( 'Подпись внизу', 'footer' ),
+				'footer_size'         => array( 'Кегль подписи', 'footer' ),
+				'footer_color'        => array( 'Цвет подписи', 'footer' ),
+				'footer_align'        => array( 'Выравнивание подписи', 'footer' ),
+				'footer_gap'          => array( 'Отступ над подписью', 'footer' ),
+				'logo_id'             => array( 'Логотип (PNG с прозрачностью)', 'footer' ),
+				'logo_position'       => array( 'Позиция логотипа', 'footer' ),
+				'logo_width'          => array( 'Ширина логотипа, % полотна', 'footer' ),
+				'logo_alpha'          => array( 'Непрозрачность логотипа, %', 'footer' ),
+				'logo_offset_x'       => array( 'Отступ логотипа X', 'footer' ),
+				'logo_offset_y'       => array( 'Отступ логотипа Y', 'footer' ),
+			);
+		}
+
 		return array(
 			'name'                => array( 'Название', 'canvas' ),
 			'width'               => array( 'Ширина, px', 'canvas' ),
@@ -348,44 +454,60 @@ class WPPF_Admin {
 		);
 	}
 
+	private static function presets_url( $type, $preset = '' ) {
+		$args = array(
+			'page' => self::PRESETS_SLUG,
+			'type' => $type,
+		);
+		if ( '' !== $preset ) {
+			$args['preset'] = $preset;
+		}
+		return add_query_arg( $args, admin_url( 'admin.php' ) );
+	}
+
 	public static function page_presets() {
-		$presets = WPPF_Image_Presets::all();
+		$type    = self::preset_type( isset( $_GET['type'] ) ? sanitize_key( $_GET['type'] ) : 'infographic' ); // phpcs:ignore WordPress.Security.NonceVerification
+		$class   = self::preset_class( $type );
+		$presets = $class::all();
 		$current = isset( $_GET['preset'] ) ? sanitize_key( $_GET['preset'] ) : (string) key( $presets ); // phpcs:ignore WordPress.Security.NonceVerification
 		$is_new  = 'new' === $current;
-		$preset  = $is_new ? WPPF_Image_Presets::schema() : WPPF_Image_Presets::get( $current );
+		$preset  = $is_new ? $class::schema() : $class::get( $current );
 
 		echo '<div class="wrap wppf-wrap"><h1>Пресеты картинок</h1>';
 		self::notice();
 
+		echo '<h2 class="nav-tab-wrapper wppf-type-tabs">';
+		foreach ( array(
+			'infographic' => 'Инфографика',
+			'cover'       => 'Обложка',
+		) as $t => $label ) {
+			echo '<a class="nav-tab' . ( $t === $type ? ' nav-tab-active' : '' ) . '" href="' . esc_url( self::presets_url( $t ) ) . '">' . esc_html( $label ) . '</a>';
+		}
+		echo '</h2>';
+		echo '<p class="description">' . ( 'infographic' === $type
+			? 'Заголовок и нумерованные тезисы списком или сеткой — как инфографика в llm-agent-articles, но вертикальная 2:3. Все тезисы — одним кеглем; не влезающий тезис модель переписывает короче, иначе он убирается целиком.'
+			: 'Картинка записи + заголовок. Используется, когда в ленте выбран формат «Обложка», и как запасной вариант, если тезисов меньше трёх.' ) . '</p>';
+
 		echo '<p class="wppf-tabs">';
 		foreach ( $presets as $id => $p ) {
-			$class = $id === $current ? 'button button-primary' : 'button';
-			echo '<a class="' . esc_attr( $class ) . '" href="' . esc_url( admin_url( 'admin.php?page=' . self::PRESETS_SLUG . '&preset=' . $id ) ) . '">' . esc_html( $p['name'] ) . '</a> ';
+			$btn = $id === $current ? 'button button-primary' : 'button';
+			echo '<a class="' . esc_attr( $btn ) . '" href="' . esc_url( self::presets_url( $type, $id ) ) . '">' . esc_html( $p['name'] ) . '</a> ';
 		}
-		echo '<a class="button' . ( $is_new ? ' button-primary' : '' ) . '" href="' . esc_url( admin_url( 'admin.php?page=' . self::PRESETS_SLUG . '&preset=new' ) ) . '">+ Новый</a></p>';
+		echo '<a class="button' . ( $is_new ? ' button-primary' : '' ) . '" href="' . esc_url( self::presets_url( $type, 'new' ) ) . '">+ Новый</a></p>';
 
 		echo '<div class="wppf-preset-layout"><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="wppf-preset-form">';
 		wp_nonce_field( 'wppf_save_preset' );
-		echo '<input type="hidden" name="action" value="wppf_save_preset"><input type="hidden" name="preset_id" value="' . esc_attr( $is_new ? '' : $current ) . '">';
+		echo '<input type="hidden" name="action" value="wppf_save_preset"><input type="hidden" name="preset_type" value="' . esc_attr( $type ) . '"><input type="hidden" name="preset_id" value="' . esc_attr( $is_new ? '' : $current ) . '">';
 
-		$groups = array(
-			'canvas'  => 'Полотно',
-			'filters' => 'Картинка: фильтры и слои',
-			'caption' => 'Текст',
-			'footer'  => 'Подпись внизу',
-			'logo'    => 'Логотип и рамка',
-			'output'  => 'Файл',
-		);
-		$labels = self::preset_labels();
-
-		foreach ( $groups as $group => $title ) {
+		$labels = self::preset_labels( $type );
+		foreach ( self::preset_groups( $type ) as $group => $title ) {
 			echo '<div class="wppf-section"><h3>' . esc_html( $title ) . '</h3><table class="form-table">';
 			foreach ( $labels as $key => $meta ) {
 				if ( $meta[1] !== $group ) {
 					continue;
 				}
 				echo '<tr><th>' . esc_html( $meta[0] ) . '</th><td>';
-				self::preset_field( $key, $preset[ $key ] ?? '' );
+				self::preset_field( $type, $key, $preset[ $key ] ?? '' );
 				echo '</td></tr>';
 			}
 			echo '</table></div>';
@@ -394,43 +516,49 @@ class WPPF_Admin {
 		submit_button( 'Сохранить пресет' );
 		echo '</form>';
 
-		echo '<div class="wppf-preview-pane"><h3>Предпросмотр</h3>';
+		echo '<div class="wppf-preview-pane" data-type="' . esc_attr( $type ) . '"><h3>Предпросмотр</h3>';
 		echo '<p><label>ID записи для примера <input type="number" class="small-text wppf-preview-post" placeholder="последняя"></label> <button type="button" class="button wppf-preview-btn">Собрать</button></p>';
-		echo '<div class="wppf-preview-box"><img class="wppf-preview-img" alt="" style="display:none"><p class="wppf-preview-note description">Собирается с текущими (ещё не сохранёнными) значениями формы.</p></div>';
+		echo '<div class="wppf-preview-box"><img class="wppf-preview-img" alt="" style="display:none"><p class="wppf-preview-note description">Собирается с текущими (ещё не сохранёнными) значениями формы.' . ( 'infographic' === $type ? ' Тезисы — из записи (вручную, «Коротко», H2, списки или уже готовые от модели), иначе — пример.' : '' ) . '</p></div>';
 
 		if ( ! $is_new ) {
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" onsubmit="return confirm(\'Удалить пресет?\')">';
 			wp_nonce_field( 'wppf_delete_preset' );
-			echo '<input type="hidden" name="action" value="wppf_delete_preset"><input type="hidden" name="preset_id" value="' . esc_attr( $current ) . '"><button class="button-link wppf-danger">Удалить пресет</button></form>';
+			echo '<input type="hidden" name="action" value="wppf_delete_preset"><input type="hidden" name="preset_type" value="' . esc_attr( $type ) . '"><input type="hidden" name="preset_id" value="' . esc_attr( $current ) . '"><button class="button-link wppf-danger">Удалить пресет</button></form>';
 		}
 
 		echo '<h3>Перенос между сайтами</h3>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'wppf_export_presets' );
-		echo '<input type="hidden" name="action" value="wppf_export_presets"><button class="button">Скачать все пресеты (JSON)</button></form>';
+		echo '<input type="hidden" name="action" value="wppf_export_presets"><input type="hidden" name="preset_type" value="' . esc_attr( $type ) . '"><button class="button">Скачать пресеты этой вкладки (JSON)</button></form>';
 		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'wppf_import_presets' );
-		echo '<input type="hidden" name="action" value="wppf_import_presets"><p><input type="file" name="presets_json" accept=".json,application/json"> <button class="button">Импорт</button></p><p class="description">ID логотипов при переносе не совпадут — перевыберите их после импорта.</p></form>';
+		echo '<input type="hidden" name="action" value="wppf_import_presets"><input type="hidden" name="preset_type" value="' . esc_attr( $type ) . '"><p><input type="file" name="presets_json" accept=".json,application/json"> <button class="button">Импорт</button></p><p class="description">ID логотипов при переносе не совпадут — перевыберите их после импорта.</p></form>';
 
 		echo '</div></div></div>';
 	}
 
-	private static function preset_field( $key, $value ) {
-		$name = 'preset[' . $key . ']';
+	private static function preset_field( $type, $key, $value ) {
+		$name      = 'preset[' . $key . ']';
+		$positions = WPPF_Image_Presets::positions();
+		$aligns    = array(
+			'left'   => 'По левому краю',
+			'center' => 'По центру',
+			'right'  => 'По правому краю',
+		);
 
 		$selects = array(
-			'layout'             => WPPF_Image_Presets::layouts(),
+			'layout'             => 'infographic' === $type ? WPPF_Infographic_Presets::layouts() : WPPF_Image_Presets::layouts(),
 			'fit'                => WPPF_Image_Presets::fit_modes(),
-			'focal'              => WPPF_Image_Presets::positions(),
-			'caption_position'   => WPPF_Image_Presets::positions(),
-			'footer_position'    => WPPF_Image_Presets::positions(),
-			'logo_position'      => WPPF_Image_Presets::positions(),
+			'focal'              => $positions,
+			'caption_position'   => $positions,
+			'footer_position'    => $positions,
+			'logo_position'      => $positions,
 			'gradient_direction' => WPPF_Image_Presets::gradient_directions(),
-			'caption_align'      => array(
-				'left'   => 'По левому краю',
-				'center' => 'По центру',
-				'right'  => 'По правому краю',
-			),
+			'caption_align'      => $aligns,
+			'title_align'        => $aligns,
+			'footer_align'       => $aligns,
+			'badge_style'        => WPPF_Infographic_Presets::badge_styles(),
+			'background_mode'    => WPPF_Infographic_Presets::background_modes(),
 			'format'             => array(
 				'jpg'  => 'JPEG',
 				'webp' => 'WebP',
@@ -447,7 +575,7 @@ class WPPF_Admin {
 			return;
 		}
 
-		if ( 'caption_font' === $key ) {
+		if ( 'caption_font' === $key || 'font' === $key ) {
 			echo '<select name="' . esc_attr( $name ) . '"><option value="">Автоматически</option>';
 			foreach ( WPPF_Image_Composer::uploaded_fonts() as $font ) {
 				echo '<option value="' . esc_attr( $font['path'] ) . '"' . selected( (string) $value, $font['path'], false ) . '>' . esc_html( $font['name'] ) . '</option>';
@@ -466,7 +594,7 @@ class WPPF_Admin {
 			return;
 		}
 
-		if ( preg_match( '/(_hex|_color|^background)$/', $key ) ) {
+		if ( preg_match( '/(_hex|_color|^background|^badge_bg)$/', $key ) ) {
 			echo '<input type="text" class="wppf-color" name="' . esc_attr( $name ) . '" value="' . esc_attr( (string) $value ) . '">';
 			return;
 		}
@@ -476,45 +604,64 @@ class WPPF_Admin {
 			return;
 		}
 
-		$step = 'caption_line_height' === $key ? '0.05' : '1';
+		$step = preg_match( '/_line_height$/', $key ) ? '0.05' : '1';
 		echo '<input type="number" step="' . esc_attr( $step ) . '" class="small-text" name="' . esc_attr( $name ) . '" value="' . esc_attr( (string) $value ) . '">';
 	}
 
 	public static function handle_save_preset() {
 		self::guard( 'wppf_save_preset' );
+		$type   = self::preset_type( isset( $_POST['preset_type'] ) ? sanitize_key( $_POST['preset_type'] ) : '' );
+		$class  = self::preset_class( $type );
 		$values = isset( $_POST['preset'] ) && is_array( $_POST['preset'] ) ? wp_unslash( $_POST['preset'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-		$id     = WPPF_Image_Presets::save( isset( $_POST['preset_id'] ) ? sanitize_key( $_POST['preset_id'] ) : '', $values );
-		self::redirect( self::PRESETS_SLUG, 'saved', array( 'preset' => $id ) );
+		$id     = $class::save( isset( $_POST['preset_id'] ) ? sanitize_key( $_POST['preset_id'] ) : '', $values );
+		self::redirect( self::PRESETS_SLUG, 'saved', array( 'type' => $type, 'preset' => $id ) );
 	}
 
 	public static function handle_delete_preset() {
 		self::guard( 'wppf_delete_preset' );
-		WPPF_Image_Presets::delete( isset( $_POST['preset_id'] ) ? sanitize_key( $_POST['preset_id'] ) : '' );
-		self::redirect( self::PRESETS_SLUG, 'deleted' );
+		$type  = self::preset_type( isset( $_POST['preset_type'] ) ? sanitize_key( $_POST['preset_type'] ) : '' );
+		$class = self::preset_class( $type );
+		$class::delete( isset( $_POST['preset_id'] ) ? sanitize_key( $_POST['preset_id'] ) : '' );
+		self::redirect( self::PRESETS_SLUG, 'deleted', array( 'type' => $type ) );
 	}
 
 	public static function handle_export_presets() {
 		self::guard( 'wppf_export_presets' );
+		$type  = self::preset_type( isset( $_POST['preset_type'] ) ? sanitize_key( $_POST['preset_type'] ) : '' );
+		$class = self::preset_class( $type );
 		nocache_headers();
 		header( 'Content-Type: application/json; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename="wppf-presets-' . gmdate( 'Y-m-d' ) . '.json"' );
-		echo wp_json_encode( WPPF_Image_Presets::all(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.Security.EscapeOutput
+		header( 'Content-Disposition: attachment; filename="wppf-' . $type . '-presets-' . gmdate( 'Y-m-d' ) . '.json"' );
+		echo wp_json_encode( $class::all(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ); // phpcs:ignore WordPress.Security.EscapeOutput
 		exit;
 	}
 
 	public static function handle_import_presets() {
 		self::guard( 'wppf_import_presets' );
-		$file = isset( $_FILES['presets_json']['tmp_name'] ) ? sanitize_text_field( (string) $_FILES['presets_json']['tmp_name'] ) : '';
-		$data = $file && is_uploaded_file( $file ) ? json_decode( (string) file_get_contents( $file ), true ) : null; // phpcs:ignore
+		$type  = self::preset_type( isset( $_POST['preset_type'] ) ? sanitize_key( $_POST['preset_type'] ) : '' );
+		$class = self::preset_class( $type );
+		$file  = isset( $_FILES['presets_json']['tmp_name'] ) ? sanitize_text_field( (string) $_FILES['presets_json']['tmp_name'] ) : '';
+		$data  = $file && is_uploaded_file( $file ) ? json_decode( (string) file_get_contents( $file ), true ) : null; // phpcs:ignore
 		if ( ! is_array( $data ) ) {
-			self::redirect( self::PRESETS_SLUG, 'import_error' );
+			self::redirect( self::PRESETS_SLUG, 'import_error', array( 'type' => $type ) );
 		}
 		foreach ( $data as $id => $preset ) {
 			if ( is_array( $preset ) ) {
-				WPPF_Image_Presets::save( (string) $id, $preset );
+				$class::save( (string) $id, $preset );
 			}
 		}
-		self::redirect( self::PRESETS_SLUG, 'imported' );
+		self::redirect( self::PRESETS_SLUG, 'imported', array( 'type' => $type ) );
+	}
+
+	/** Demo points for the preview when the sample post has none of its own. */
+	private static function sample_points() {
+		return array(
+			array( 'label' => 'Установка', 'text' => 'Сервер ставится одной командой и сразу виден в списке инструментов.' ),
+			array( 'label' => 'Настройка', 'text' => 'Пути и ключи задаются в одном конфиге, без правки кода.' ),
+			array( 'label' => 'Проверка', 'text' => 'Тестовый запрос показывает, что модель получила доступ к инструменту.' ),
+			array( 'label' => 'Ошибки', 'text' => 'Чаще всего мешают неверный путь к файлу и забытый перезапуск клиента.' ),
+			array( 'label' => 'Безопасность', 'text' => 'Давайте серверу доступ только к нужным папкам и сервисам.' ),
+		);
 	}
 
 	/** Renders the posted (unsaved) preset onto a sample post and returns the image URL. */
@@ -524,8 +671,10 @@ class WPPF_Admin {
 			wp_send_json_error( 'Недостаточно прав' );
 		}
 
+		$type   = self::preset_type( isset( $_POST['type'] ) ? sanitize_key( $_POST['type'] ) : '' );
+		$class  = self::preset_class( $type );
 		$values = isset( $_POST['preset'] ) && is_array( $_POST['preset'] ) ? wp_unslash( $_POST['preset'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-		$preset = WPPF_Image_Presets::sanitize( $values );
+		$preset = $class::sanitize( $values );
 
 		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
 		$post    = $post_id ? get_post( $post_id ) : null;
@@ -540,33 +689,50 @@ class WPPF_Admin {
 			$post   = $latest ? $latest[0] : null;
 		}
 
-		$config = WPPF_Feed_Config::normalise( array() );
 		$config = array_merge(
-			$config,
+			WPPF_Feed_Config::normalise( array() ),
 			array(
-				'feed_key'   => 'preview',
-				'feed_slug'  => 'preview',
-				'feed_title' => 'Предпросмотр',
-				'term'       => null,
+				'feed_key'           => 'preview',
+				'feed_slug'          => 'preview',
+				'feed_title'         => 'Предпросмотр',
+				'term'               => null,
+				'infographic_source' => 'auto',
 			)
 		);
 
-		$found   = $post ? WPPF_Image_Resolver::find( $post, $config ) : null;
-		$source  = $found ? WPPF_Image_Resolver::local_path( $found ) : '';
-		$caption = $post ? get_the_title( $post ) : 'Пример заголовка пина: как собрать вертикальную картинку 2:3';
-		$footer  = WPPF_Template::resolve( 'site_domain', array( 'config' => $config ) );
+		$found  = $post ? WPPF_Image_Resolver::find( $post, $config ) : null;
+		$source = $found ? WPPF_Image_Resolver::local_path( $found ) : '';
+		$title  = $post ? get_the_title( $post ) : 'Как подключить MCP-сервер: 5 шагов';
+		$footer = WPPF_Template::resolve( 'site_domain', array( 'config' => $config ) );
+		$path   = WPPF_Pin_Builder::base_dir() . 'preview/' . $type . '-' . get_current_user_id() . '.' . WPPF_Image_Composer::extension_for( $preset['format'] );
+		$note   = $post ? 'Запись #' . $post->ID . ' «' . $title . '»' : 'Без записи';
 
-		$ext  = WPPF_Image_Composer::extension_for( $preset['format'] );
-		$path = WPPF_Pin_Builder::base_dir() . 'preview/preset-' . get_current_user_id() . '.' . $ext;
-		$res  = WPPF_Image_Composer::render( $preset, $source ? $source : null, $caption, $footer, $path );
+		if ( 'infographic' === $type ) {
+			$ig = $post ? WPPF_Infographic::points_for( $post, $config ) : array( 'state' => 'none' );
+			if ( 'ready' === $ig['state'] ) {
+				$points = $ig['points'];
+				$note  .= ', тезисы: ' . $ig['source'];
+			} else {
+				$points = self::sample_points();
+				$note  .= ', тезисы — пример (у записи своих нет)';
+			}
+			$res = WPPF_Infographic::render_fitting( $preset, $points, $title, $footer, $source ? $source : null, $path );
+			$err = $res['ok'] ? implode( '; ', $res['notes'] ) : $res['error'];
+		} else {
+			$res = WPPF_Image_Composer::render( $preset, $source ? $source : null, $title, $footer, $path );
+			$err = $res['error'];
+			if ( ! $found ) {
+				$note .= ', картинки не нашлось';
+			}
+		}
 
 		if ( ! $res['ok'] ) {
-			wp_send_json_error( $res['error'] );
+			wp_send_json_error( $err );
 		}
 		wp_send_json_success(
 			array(
 				'url'  => WPPF_Pin_Builder::base_url() . 'preview/' . basename( $path ) . '?v=' . time(),
-				'note' => trim( ( $post ? 'Запись #' . $post->ID . ' «' . get_the_title( $post ) . '»' : 'Без записи — текстовый пин' ) . ( $found ? '' : ', картинки не нашлось' ) . ( $res['error'] ? '. ' . $res['error'] : '' ) ),
+				'note' => $note . ( '' !== $err ? '. ' . $err : '' ),
 			)
 		);
 	}

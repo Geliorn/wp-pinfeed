@@ -106,6 +106,7 @@
 			return f.name.indexOf( 'preset[' ) === 0;
 		} );
 		data.push( { name: 'action', value: 'wppf_preview_preset' } );
+		data.push( { name: 'type', value: $pane.data( 'type' ) || 'cover' } );
 		data.push( { name: 'nonce', value: wppfAdmin.previewNonce } );
 		data.push( { name: 'post_id', value: $pane.find( '.wppf-preview-post' ).val() || '' } );
 

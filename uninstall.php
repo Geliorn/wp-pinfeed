@@ -11,7 +11,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 
 global $wpdb;
 
-foreach ( array( 'wppf_settings', 'wppf_log', 'wppf_auto_feed', 'wppf_image_presets', 'wppf_cache_ver', 'wppf_rewrite_ver', 'wppf_last_tick' ) as $option ) {
+foreach ( array( 'wppf_settings', 'wppf_log', 'wppf_auto_feed', 'wppf_image_presets', 'wppf_infographic_presets', 'wppf_cache_ver', 'wppf_rewrite_ver', 'wppf_last_tick' ) as $option ) {
 	delete_option( $option );
 }
 
@@ -30,7 +30,7 @@ foreach ( $feeds as $feed_id ) {
 	wp_delete_post( $feed_id, true );
 }
 
-foreach ( array( '_wppf_llm', '_wppf_image_id', '_wppf_pin_title', '_wppf_pin_description', '_wppf_exclude' ) as $key ) {
+foreach ( array( '_wppf_llm', '_wppf_theses', '_wppf_theses_manual', '_wppf_image_id', '_wppf_pin_title', '_wppf_pin_description', '_wppf_exclude' ) as $key ) {
 	delete_post_meta_by_key( $key );
 }
 $wpdb->query( "DELETE FROM {$wpdb->termmeta} WHERE meta_key IN ('wppf_image_id', 'wppf_last_fetch_at')" ); // phpcs:ignore

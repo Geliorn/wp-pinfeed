@@ -103,3 +103,14 @@
 		max-width: 400px;
 	}
 }
+.wppf-form .wppf-subhead th {
+	padding: 18px 0 4px;
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: .04em;
+	color: #50575e;
+	border-bottom: 1px solid #f0f0f1;
+}
+.wppf-type-tabs {
+	margin: 12px 0 4px;
+}

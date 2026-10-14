@@ -16,6 +16,12 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class WPPF_Pin_Builder {
 
+	/**
+	 * Part of every pin's file hash. Bump it when the drawing code changes in
+	 * a way that should replace already rendered pins.
+	 */
+	const RENDER_VERSION = 2;
+
 	/** Images that may still be rendered synchronously in this request. */
 	private static $sync_budget = null;
 
@@ -157,27 +163,45 @@ class WPPF_Pin_Builder {
 
 		$mode = $config['generate_mode'];
 		$gen  = 'always' === $mode || ( 'not_vertical' === $mode && ( ! $found || ! WPPF_Image_Resolver::is_vertical( $found ) ) );
-
-		if ( $gen && ! $found && ! $config['generate_without_source'] ) {
-			$gen = false;
-		}
 		if ( $gen && ! WPPF_Image_Composer::available() ) {
 			$gen     = false;
 			$notes[] = 'GD недоступен — картинка отдаётся как есть';
+		}
+
+		// Infographic first; with fewer than three points — the cover layout.
+		$style  = 'cover';
+		$points = array();
+		if ( $gen && 'infographic' === $config['pin_style'] ) {
+			$ig = WPPF_Infographic::points_for( $post, $config );
+			if ( 'ready' === $ig['state'] ) {
+				$style  = 'infographic';
+				$points = $ig['points'];
+			} elseif ( 'pending' === $ig['state'] ) {
+				$notes[] = 'тезисы для инфографики ещё готовит модель — фоновая задача';
+				return array( 'state' => 'pending', 'image' => $found ? self::describe( $found ) : null, 'notes' => $notes );
+			} else {
+				$notes[] = 'тезисов меньше трёх — пин-обложка вместо инфографики';
+			}
+		}
+
+		// A cover pin needs a picture, unless text-only pins are allowed.
+		if ( $gen && 'cover' === $style && ! $found && ! $config['generate_without_source'] ) {
+			$gen = false;
 		}
 
 		if ( ! $gen ) {
 			return array( 'state' => $found ? 'ready' : 'none', 'image' => $found ? self::describe( $found ) : null, 'notes' => $notes );
 		}
 
-		$plan = self::render_plan( $post, $config, $ctx, $found );
+		$plan = self::render_plan( $post, $config, $ctx, $found, $style, $points );
 
 		if ( is_readable( $plan['path'] ) ) {
-			return array( 'state' => 'ready', 'image' => self::describe_file( $plan ), 'notes' => array( 'собранный пин' ) );
+			$notes[] = 'infographic' === $style ? 'инфографика (тезисы: ' . $ig['source'] . ')' : 'собранный пин';
+			return array( 'state' => 'ready', 'image' => self::describe_file( $plan ), 'notes' => $notes );
 		}
 
 		$can_render = $allow_render && ( null === self::$sync_budget || self::$sync_budget > 0 );
-		if ( $can_render && self::$defer_downloads && $found && ! $found['attachment_id'] && ! WPPF_Image_Resolver::has_local_copy( $found ) ) {
+		if ( $can_render && self::$defer_downloads && $plan['needs_source'] && ! WPPF_Image_Resolver::has_local_copy( $found ) ) {
 			$can_render = false;
 		}
 		if ( $can_render ) {
@@ -189,7 +213,7 @@ class WPPF_Pin_Builder {
 				if ( '' !== $result['error'] ) {
 					$notes[] = $result['error'];
 				}
-				$notes[] = 'пин собран сейчас';
+				$notes[] = 'infographic' === $style ? 'инфографика собрана сейчас (тезисы: ' . $ig['source'] . ')' : 'пин собран сейчас';
 				return array( 'state' => 'ready', 'image' => self::describe_file( $plan ), 'notes' => $notes, 'rendered' => true );
 			}
 			$notes[] = 'ошибка сборки: ' . $result['error'];
@@ -203,21 +227,37 @@ class WPPF_Pin_Builder {
 		return array( 'state' => 'pending', 'image' => $found ? self::describe( $found ) : null, 'notes' => $notes );
 	}
 
-	/** Where the composed pin lives and what goes into it. */
-	public static function render_plan( WP_Post $post, array $config, array $ctx, $found ) {
-		$preset  = WPPF_Image_Presets::get( $config['image_preset'] );
-		$caption = self::one_line( WPPF_Template::render( $config['caption_template'], $ctx ) );
-		$footer  = self::one_line( WPPF_Template::render( $config['footer_template'], $ctx ) );
+	/**
+	 * Where the composed pin lives and what goes into it.
+	 *
+	 * @param string $style  infographic | cover
+	 * @param array  $points Infographic points (empty for a cover).
+	 */
+	public static function render_plan( WP_Post $post, array $config, array $ctx, $found, $style = 'cover', array $points = array() ) {
+		$footer = self::one_line( WPPF_Template::render( $config['footer_template'], $ctx ) );
+
+		if ( 'infographic' === $style ) {
+			$preset       = WPPF_Infographic_Presets::get( $config['infographic_preset'] );
+			$caption      = self::one_line( WPPF_Template::render( $config['infographic_title'], $ctx ) );
+			$needs_source = $found && 'source' === $preset['background_mode'];
+		} else {
+			$preset       = WPPF_Image_Presets::get( $config['image_preset'] );
+			$caption      = self::one_line( WPPF_Template::render( $config['caption_template'], $ctx ) );
+			$needs_source = (bool) $found;
+		}
 
 		$hash = substr(
 			md5(
 				wp_json_encode(
 					array(
+						self::RENDER_VERSION,
+						$style,
 						$preset,
 						$caption,
 						$footer,
-						$found ? array( $found['attachment_id'], $found['url'] ) : null,
-						$found && $found['attachment_id'] ? (string) get_post_modified_time( 'U', true, $found['attachment_id'] ) : '',
+						$points,
+						$needs_source ? array( $found['attachment_id'], $found['url'] ) : null,
+						$needs_source && $found['attachment_id'] ? (string) get_post_modified_time( 'U', true, $found['attachment_id'] ) : '',
 					)
 				)
 			),
@@ -229,26 +269,39 @@ class WPPF_Pin_Builder {
 		$name = sanitize_file_name( $config['feed_key'] ) . '-' . $hash . '.' . $ext;
 
 		return array(
-			'post_id'  => (int) $post->ID,
-			'feed_key' => $config['feed_key'],
-			'preset'   => $preset,
-			'caption'  => $caption,
-			'footer'   => $footer,
-			'path'     => self::base_dir() . $post->ID . '/' . $name,
-			'url'      => self::base_url() . $post->ID . '/' . $name,
+			'post_id'      => (int) $post->ID,
+			'feed_key'     => $config['feed_key'],
+			'style'        => $style,
+			'preset'       => $preset,
+			'caption'      => $caption,
+			'footer'       => $footer,
+			'points'       => $points,
+			'needs_source' => $needs_source,
+			'path'         => self::base_dir() . $post->ID . '/' . $name,
+			'url'          => self::base_url() . $post->ID . '/' . $name,
 		);
 	}
 
 	public static function render( array $plan, $found ) {
-		$source = $found ? WPPF_Image_Resolver::local_path( $found ) : '';
-		if ( $found && '' === $source ) {
-			return array(
-				'ok'    => false,
-				'error' => 'исходная картинка недоступна',
+		$source = $plan['needs_source'] ? WPPF_Image_Resolver::local_path( $found ) : '';
+
+		if ( 'infographic' === $plan['style'] ) {
+			// No background picture is no reason to fail: the solid colour stays.
+			$fit    = WPPF_Infographic::render_fitting( $plan['preset'], $plan['points'], $plan['caption'], $plan['footer'], $source ? $source : null, $plan['path'] );
+			$result = array(
+				'ok'    => $fit['ok'],
+				'error' => $fit['ok'] ? implode( '; ', $fit['notes'] ) : $fit['error'],
 			);
+		} else {
+			if ( $plan['needs_source'] && '' === $source ) {
+				return array(
+					'ok'    => false,
+					'error' => 'исходная картинка недоступна',
+				);
+			}
+			$result = WPPF_Image_Composer::render( $plan['preset'], $source ? $source : null, $plan['caption'], $plan['footer'], $plan['path'] );
 		}
 
-		$result = WPPF_Image_Composer::render( $plan['preset'], $source ? $source : null, $plan['caption'], $plan['footer'], $plan['path'] );
 		if ( $result['ok'] ) {
 			self::delete_stale( $plan );
 		}
