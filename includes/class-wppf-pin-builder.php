@@ -20,7 +20,7 @@ class WPPF_Pin_Builder {
 	 * Part of every pin's file hash. Bump it when the drawing code changes in
 	 * a way that should replace already rendered pins.
 	 */
-	const RENDER_VERSION = 2;
+	const RENDER_VERSION = 3;
 
 	/** Images that may still be rendered synchronously in this request. */
 	private static $sync_budget = null;
@@ -55,7 +55,8 @@ class WPPF_Pin_Builder {
 	 * @param array   $config
 	 * @param bool    $allow_render Render a missing pin now (subject to the sync budget).
 	 * @return array{status:string,title:string,description:string,link:string,image:array|null,image_state:string,notes:array}
-	 *         status: ready | pending (image still to render) | skip
+	 *         status: ready | skip — a pin without a finished image never goes
+	 *         into the feed: Pinterest creates a pin once and never re-reads it.
 	 */
 	public static function build( WP_Post $post, array $config, $allow_render = true ) {
 		$ctx = array(
@@ -85,12 +86,8 @@ class WPPF_Pin_Builder {
 		$pin['rendered']    = ! empty( $image['rendered'] );
 		$pin['notes']       = $image['notes'];
 
-		if ( 'pending' === $image['state'] ) {
-			$pin['status'] = 'skip' === $config['pending_fallback'] ? 'skip' : 'pending';
-		}
-		if ( ! $pin['image'] && $config['require_image'] ) {
+		if ( 'ready' !== $image['state'] || ! $pin['image'] ) {
 			$pin['status'] = 'skip';
-			$pin['notes'][] = 'нет картинки — элемент не попадёт в ленту';
 		}
 
 		/**
@@ -150,114 +147,102 @@ class WPPF_Pin_Builder {
 
 	/**
 	 * @return array{state:string,image:array|null,notes:array}
-	 *         state: ready | pending | none
+	 *         state: ready | pending (the model or the background render hasn't
+	 *         finished yet) | none (no picture and nothing to generate from)
 	 */
 	private static function image( WP_Post $post, array $config, array $ctx, $allow_render ) {
-		$notes = array();
-		$found = WPPF_Image_Resolver::find( $post, $config );
+		$notes  = array();
+		$pick   = WPPF_Image_Resolver::find( $post, $config );
+		$labels = WPPF_Image_Resolver::sources();
 
-		// A picture made by hand for Pinterest is never re-composed.
-		if ( $found && 'pin_meta' === $found['source'] ) {
-			return array( 'state' => 'ready', 'image' => self::describe( $found ), 'notes' => array( 'картинка из метабокса записи' ) );
+		foreach ( $pick['skipped'] as $skip ) {
+			$notes[] = 'пропущено горизонтальное: ' . ( $labels[ $skip['source'] ]['label'] ?? $skip['source'] );
 		}
 
-		$mode = $config['generate_mode'];
-		$gen  = 'always' === $mode || ( 'not_vertical' === $mode && ( ! $found || ! WPPF_Image_Resolver::is_vertical( $found ) ) );
-		if ( $gen && ! WPPF_Image_Composer::available() ) {
-			$gen     = false;
-			$notes[] = 'GD недоступен — картинка отдаётся как есть';
+		if ( $pick['found'] ) {
+			$found   = $pick['found'];
+			$notes[] = 'изображение: ' . ( $labels[ $found['source'] ]['label'] ?? $found['source'] );
+			return array( 'state' => 'ready', 'image' => self::describe( $found ), 'notes' => $notes );
 		}
 
-		// Infographic first; with fewer than three points — the cover layout.
-		$style  = 'cover';
-		$points = array();
-		if ( $gen && 'infographic' === $config['pin_style'] ) {
-			$ig = WPPF_Infographic::points_for( $post, $config );
-			if ( 'ready' === $ig['state'] ) {
-				$style  = 'infographic';
-				$points = $ig['points'];
-			} elseif ( 'pending' === $ig['state'] ) {
-				$notes[] = 'тезисы для инфографики ещё готовит модель — фоновая задача';
-				return array( 'state' => 'pending', 'image' => $found ? self::describe( $found ) : null, 'notes' => $notes );
-			} else {
-				$notes[] = 'тезисов меньше трёх — пин-обложка вместо инфографики';
-			}
+		if ( 'skip' === $config['image_missing'] ) {
+			$notes[] = 'изображения нет, генерация выключена — запись не попадёт в ленту';
+			return array( 'state' => 'none', 'image' => null, 'notes' => $notes );
 		}
 
-		// A cover pin needs a picture, unless text-only pins are allowed.
-		if ( $gen && 'cover' === $style && ! $found && ! $config['generate_without_source'] ) {
-			$gen = false;
+		if ( ! WPPF_Image_Composer::text_available() ) {
+			$notes[] = 'GD с FreeType недоступен — инфографику не собрать';
+			return array( 'state' => 'none', 'image' => null, 'notes' => $notes );
 		}
 
-		if ( ! $gen ) {
-			return array( 'state' => $found ? 'ready' : 'none', 'image' => $found ? self::describe( $found ) : null, 'notes' => $notes );
+		$ig = WPPF_Infographic::points_for( $post, $config );
+		if ( 'pending' === $ig['state'] ) {
+			$notes[] = 'тезисы для инфографики ещё пишет модель — фоновая задача';
+			return array( 'state' => 'pending', 'image' => null, 'notes' => $notes );
+		}
+		if ( 'none' === $ig['state'] ) {
+			$notes[] = $ig['reason'];
+			return array( 'state' => 'none', 'image' => null, 'notes' => $notes );
 		}
 
-		$plan = self::render_plan( $post, $config, $ctx, $found, $style, $points );
+		// A skipped horizontal picture can still be the infographic's background.
+		$background = $pick['skipped'] ? $pick['skipped'][0] : null;
+		$plan       = self::render_plan( $post, $config, $ctx, $background, $ig['points'] );
+		$source     = 'manual' === $ig['source'] ? 'тезисы из блока «Pinterest»' : 'тезисы от модели';
 
 		if ( is_readable( $plan['path'] ) ) {
-			$notes[] = 'infographic' === $style ? 'инфографика (тезисы: ' . $ig['source'] . ')' : 'собранный пин';
+			$notes[] = 'инфографика (' . $source . ')';
 			return array( 'state' => 'ready', 'image' => self::describe_file( $plan ), 'notes' => $notes );
 		}
 
 		$can_render = $allow_render && ( null === self::$sync_budget || self::$sync_budget > 0 );
-		if ( $can_render && self::$defer_downloads && $plan['needs_source'] && ! WPPF_Image_Resolver::has_local_copy( $found ) ) {
+		if ( $can_render && self::$defer_downloads && $plan['needs_source'] && ! WPPF_Image_Resolver::has_local_copy( $background ) ) {
 			$can_render = false;
 		}
 		if ( $can_render ) {
 			if ( null !== self::$sync_budget ) {
 				self::$sync_budget--;
 			}
-			$result = self::render( $plan, $found );
+			$result = self::render( $plan, $background );
 			if ( $result['ok'] ) {
 				if ( '' !== $result['error'] ) {
 					$notes[] = $result['error'];
 				}
-				$notes[] = 'infographic' === $style ? 'инфографика собрана сейчас (тезисы: ' . $ig['source'] . ')' : 'пин собран сейчас';
+				$notes[] = 'инфографика собрана сейчас (' . $source . ')';
 				return array( 'state' => 'ready', 'image' => self::describe_file( $plan ), 'notes' => $notes, 'rendered' => true );
 			}
 			$notes[] = 'ошибка сборки: ' . $result['error'];
 			WPPF_Log::error( 'Пин для записи #' . $post->ID . ' (' . $config['feed_key'] . '): ' . $result['error'] );
-			// A failed render is not "pending" — retrying every request won't
-			// help, so serve the source picture rather than nothing.
-			return array( 'state' => $found ? 'ready' : 'none', 'image' => $found ? self::describe( $found ) : null, 'notes' => $notes );
+			return array( 'state' => 'none', 'image' => null, 'notes' => $notes );
 		}
 
-		$notes[] = 'пин ещё не собран — фоновая задача';
-		return array( 'state' => 'pending', 'image' => $found ? self::describe( $found ) : null, 'notes' => $notes );
+		$notes[] = 'инфографика ещё не собрана — фоновая задача';
+		return array( 'state' => 'pending', 'image' => null, 'notes' => $notes );
 	}
 
 	/**
-	 * Where the composed pin lives and what goes into it.
+	 * Where the generated infographic lives and what goes into it.
 	 *
-	 * @param string $style  infographic | cover
-	 * @param array  $points Infographic points (empty for a cover).
+	 * @param array|null $background A skipped horizontal picture, for background_mode=source.
+	 * @param array      $points     Infographic points.
 	 */
-	public static function render_plan( WP_Post $post, array $config, array $ctx, $found, $style = 'cover', array $points = array() ) {
-		$footer = self::one_line( WPPF_Template::render( $config['footer_template'], $ctx ) );
-
-		if ( 'infographic' === $style ) {
-			$preset       = WPPF_Infographic_Presets::get( $config['infographic_preset'] );
-			$caption      = self::one_line( WPPF_Template::render( $config['infographic_title'], $ctx ) );
-			$needs_source = $found && 'source' === $preset['background_mode'];
-		} else {
-			$preset       = WPPF_Image_Presets::get( $config['image_preset'] );
-			$caption      = self::one_line( WPPF_Template::render( $config['caption_template'], $ctx ) );
-			$needs_source = (bool) $found;
-		}
+	public static function render_plan( WP_Post $post, array $config, array $ctx, $background, array $points ) {
+		$preset       = WPPF_Infographic_Presets::get( $config['infographic_preset'] );
+		$title        = self::one_line( WPPF_Template::render( $config['infographic_title'], $ctx ) );
+		$footer       = self::one_line( WPPF_Template::render( $config['footer_template'], $ctx ) );
+		$needs_source = $background && 'source' === $preset['background_mode'];
 
 		$hash = substr(
 			md5(
 				wp_json_encode(
 					array(
 						self::RENDER_VERSION,
-						$style,
 						$preset,
-						$caption,
+						$title,
 						$footer,
 						$points,
-						$needs_source ? array( $found['attachment_id'], $found['url'] ) : null,
-						$needs_source && $found['attachment_id'] ? (string) get_post_modified_time( 'U', true, $found['attachment_id'] ) : '',
+						$needs_source ? array( $background['attachment_id'], $background['url'] ) : null,
+						$needs_source && $background['attachment_id'] ? (string) get_post_modified_time( 'U', true, $background['attachment_id'] ) : '',
 					)
 				)
 			),
@@ -271,9 +256,8 @@ class WPPF_Pin_Builder {
 		return array(
 			'post_id'      => (int) $post->ID,
 			'feed_key'     => $config['feed_key'],
-			'style'        => $style,
 			'preset'       => $preset,
-			'caption'      => $caption,
+			'title'        => $title,
 			'footer'       => $footer,
 			'points'       => $points,
 			'needs_source' => $needs_source,
@@ -282,30 +266,17 @@ class WPPF_Pin_Builder {
 		);
 	}
 
-	public static function render( array $plan, $found ) {
-		$source = $plan['needs_source'] ? WPPF_Image_Resolver::local_path( $found ) : '';
-
-		if ( 'infographic' === $plan['style'] ) {
-			// No background picture is no reason to fail: the solid colour stays.
-			$fit    = WPPF_Infographic::render_fitting( $plan['preset'], $plan['points'], $plan['caption'], $plan['footer'], $source ? $source : null, $plan['path'] );
-			$result = array(
-				'ok'    => $fit['ok'],
-				'error' => $fit['ok'] ? implode( '; ', $fit['notes'] ) : $fit['error'],
-			);
-		} else {
-			if ( $plan['needs_source'] && '' === $source ) {
-				return array(
-					'ok'    => false,
-					'error' => 'исходная картинка недоступна',
-				);
-			}
-			$result = WPPF_Image_Composer::render( $plan['preset'], $source ? $source : null, $plan['caption'], $plan['footer'], $plan['path'] );
-		}
-
-		if ( $result['ok'] ) {
+	public static function render( array $plan, $background ) {
+		// No background picture is no reason to fail: the solid colour stays.
+		$source = $plan['needs_source'] ? WPPF_Image_Resolver::local_path( $background ) : '';
+		$fit    = WPPF_Infographic::render_fitting( $plan['preset'], $plan['points'], $plan['title'], $plan['footer'], $source ? $source : null, $plan['path'] );
+		if ( $fit['ok'] ) {
 			self::delete_stale( $plan );
 		}
-		return $result;
+		return array(
+			'ok'    => $fit['ok'],
+			'error' => $fit['ok'] ? implode( '; ', $fit['notes'] ) : $fit['error'],
+		);
 	}
 
 	/** Older renders of the same post in the same feed. */
@@ -329,18 +300,6 @@ class WPPF_Pin_Builder {
 			}
 		}
 		@rmdir( $dir ); // phpcs:ignore
-	}
-
-	/** Is there still something to do for this pin in the background? */
-	public static function pending_work( WP_Post $post, array $config ) {
-		$work = array(
-			'llm'   => WPPF_LLM_Text::needs_generation( $post, $config ),
-			'image' => false,
-		);
-
-		$probe         = self::build( $post, $config, false );
-		$work['image'] = 'pending' === ( $probe['image_state'] ?? '' );
-		return $work;
 	}
 
 	private static function describe( array $found ) {

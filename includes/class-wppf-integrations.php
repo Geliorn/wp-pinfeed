@@ -37,13 +37,12 @@ class WPPF_Integrations {
 					'orderby'              => 'date',
 					'title_template'       => '{pin_title|llm_title|seo_title|title}',
 					'description_template' => "{pin_description|llm_description|seo_description|excerpt|content:400}\n\n{hashtags:post_tag:5}",
-					'image_sources'        => array( 'pin_meta', 'thumbnail', 'content', 'term', 'default' ),
-					'generate_mode'        => 'not_vertical',
-					// The «Коротко» block of every article is a ready set of points.
-					'pin_style'            => 'infographic',
-					'infographic_source'   => 'auto',
+					// The article's own picture (cover or infographic) as is;
+					// nothing found — an infographic with points from the model.
+					'image_sources'        => array( 'pin_meta', 'thumbnail', 'content' ),
+					'image_horizontal'     => 'use',
+					'image_missing'        => 'generate',
 					'infographic_preset'   => 'ig-list',
-					'caption_template'     => '{pin_title|title}',
 					'footer_template'      => '{site_domain}',
 					// The article plugin publishes first and attaches the cover
 					// right after; give it (and our own background tick) time.
@@ -60,20 +59,15 @@ class WPPF_Integrations {
 					'post_types'           => array( 'github_repo' ),
 					'orderby'              => 'date',
 					'title_template'       => '{pin_title|llm_title|title}',
-					'description_template' => "{pin_description|llm_description|short_description|seo_description|excerpt}\n\n{gh_stars} {gh_language}\n\n{hashtags:repo_topic:1} {hashtags:post_tag:5}",
-					// Repos rarely have a featured image; the owner avatar is
-					// small and square, so a composed 2:3 pin is the default.
-					'image_sources'        => array( 'pin_meta', 'thumbnail', 'term', 'meta', 'default' ),
-					'image_term_taxonomies' => array( 'repo_topic' ),
-					'image_meta_key'       => '_gh_owner_avatar',
-					'generate_mode'        => 'always',
-					// README headings ("Installation", "Usage") make poor points —
-					// the model reads the README instead.
-					'pin_style'            => 'infographic',
-					'infographic_source'   => 'llm',
+					'description_template' => "{pin_description|gh_pin_description|llm_description|short_description|seo_description|excerpt}\n\n{gh_stars} {gh_language}\n\n{hashtags:repo_topic:1} {hashtags:post_tag:5}",
+					// The pin llm-agent-github-repos renders for Pinterest first.
+					// The owner avatar is part of the site design, never a pin.
+					'image_sources'        => array( 'pin_meta', 'gh_pin', 'thumbnail' ),
+					'image_meta_key'       => '',
+					'image_horizontal'     => 'skip',
+					'image_missing'        => 'generate',
 					'infographic_preset'   => 'ig-grid',
 					'infographic_title'    => '{pin_title|llm_title|title}',
-					'caption_template'     => '{pin_title|title}',
 					'footer_template'      => '{gh_stars} · {site_domain}',
 				),
 			);
@@ -124,6 +118,9 @@ class WPPF_Integrations {
 			case 'gh_url':
 				$full = (string) get_post_meta( $post->ID, '_gh_full_name', true );
 				return '' !== $full ? 'github.com/' . $full : '';
+			case 'gh_pin_description':
+				// Written by llm-agent-github-repos together with its pin.
+				return (string) get_post_meta( $post->ID, '_gh_pin_description', true );
 			case 'primary_keyword':
 				return (string) get_post_meta( $post->ID, '_laa_primary_keyword', true );
 		}
@@ -137,6 +134,7 @@ class WPPF_Integrations {
 			$out['{gh_stars} {gh_forks}']        = 'Звёзды («★ 1,2k») и форки репозитория';
 			$out['{gh_language} {gh_license}']   = 'Язык и лицензия репозитория';
 			$out['{gh_full_name} {gh_url}']      = 'owner/repo и github.com/owner/repo';
+			$out['{gh_pin_description}']         = 'Описание пина, которое github-repos пишет вместе со своим пином';
 		}
 		if ( self::has_articles() ) {
 			$out['{primary_keyword}'] = 'Главный ключ статьи (llm-agent-articles)';

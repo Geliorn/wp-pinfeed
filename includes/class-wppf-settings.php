@@ -8,7 +8,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * meta on the `pinfeed` post (see WPPF_Feed_Config); the config of the
  * automatic per-term feeds lives in its own option (WPPF_Feed_Config::AUTO_OPTION),
  * because it has the same shape as a feed and is edited with the same form.
- * Image presets have their own option too (WPPF_Image_Presets), so a tuned
+ * Infographic presets have their own option too (WPPF_Infographic_Presets), so a tuned
  * set can be exported between sites of the network.
  */
 class WPPF_Settings {
@@ -41,11 +41,6 @@ class WPPF_Settings {
 			'auto_feeds_enabled'    => 0,
 			'auto_feeds_taxonomies' => array(), // taxonomy names with a feed per term
 			'auto_feeds_min_count'  => 1,       // terms with fewer posts get no feed (404)
-
-			// ----------------------------------------------------- term images
-			// Taxonomies whose terms get the "Изображение для Pinterest" field.
-			// Empty = every public taxonomy.
-			'term_image_taxonomies' => array(),
 
 			// ----------------------------------------------------------- images
 			'caption_font_path'     => '',
@@ -205,15 +200,6 @@ class WPPF_Settings {
 			default:
 				return '' !== $s['deepseek_api_key'];
 		}
-	}
-
-	/** Taxonomies whose terms carry the Pinterest image field. */
-	public static function term_image_taxonomies() {
-		$chosen = array_filter( (array) self::get( 'term_image_taxonomies', array() ) );
-		if ( ! empty( $chosen ) ) {
-			return array_values( array_filter( $chosen, 'taxonomy_exists' ) );
-		}
-		return array_values( get_taxonomies( array( 'public' => true ), 'names' ) );
 	}
 
 	/**

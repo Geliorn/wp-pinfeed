@@ -36,7 +36,6 @@ class WPPF_Feed_Config {
 			'max_age_days'          => array( 'int', 0 ),   // 0 = no limit
 			'min_age_minutes'       => array( 'int', 0 ),   // delay before a fresh post enters the feed
 			'exclude_ids'           => array( 'text', '' ),
-			'require_image'         => array( 'bool', 0 ),  // drop items that end up without any image
 
 			// ------------------------------------------------------- channel
 			'channel_title'         => array( 'text', '{feed_title}' ),
@@ -64,24 +63,14 @@ class WPPF_Feed_Config {
 
 			// --------------------------------------------------------- image
 			// Ordered chain, first hit wins. See WPPF_Image_Resolver::sources().
-			'image_sources'         => array( 'list', array( 'pin_meta', 'thumbnail', 'term', 'content', 'default' ) ),
-			'image_term_taxonomies' => array( 'list', array() ), // empty = any taxonomy of the post
-			'image_meta_key'        => array( 'text', '' ),      // for the "meta" source: attachment ID or URL
-			'default_image_id'      => array( 'int', 0 ),
-			// none | always | not_vertical — when to compose a 2:3 pin with GD.
-			'generate_mode'         => array( 'text', 'not_vertical' ),
-			// infographic (heading + numbered points, like llm-agent-articles) | cover
-			'pin_style'             => array( 'text', 'infographic' ),
+			'image_sources'         => array( 'list', array( 'pin_meta', 'gh_pin', 'thumbnail', 'content' ) ),
+			'image_meta_key'        => array( 'text', '' ),       // for the "meta" source: attachment ID or URL
+			'image_horizontal'      => array( 'text', 'skip' ),   // use | skip — wider-than-tall pictures
+			'image_missing'         => array( 'text', 'generate' ), // generate | skip — no picture found
 			'infographic_preset'    => array( 'text', 'ig-list' ),
 			'infographic_points'    => array( 'int', 5 ),
-			'infographic_source'    => array( 'text', 'auto' ), // auto | llm | structure
 			'infographic_title'     => array( 'text', '{pin_title|llm_title|title}' ),
-			'generate_without_source' => array( 'bool', 1 ),     // text-only pin on the preset background
-			'image_preset'          => array( 'text', 'pin-default' ),
-			'caption_template'      => array( 'text', '{pin_title|title}' ),
 			'footer_template'       => array( 'text', '{site_domain}' ),
-			// What a not-yet-rendered pin shows while the background tick catches up.
-			'pending_fallback'      => array( 'text', 'source' ), // source | skip
 		);
 	}
 
@@ -188,6 +177,7 @@ class WPPF_Feed_Config {
 
 	/** Casts raw stored values to their declared types, filling in defaults. */
 	public static function normalise( array $raw ) {
+		$raw = self::migrate( $raw );
 		$out = array();
 
 		foreach ( self::fields() as $key => $spec ) {
@@ -218,12 +208,43 @@ class WPPF_Feed_Config {
 		}
 
 		$out['limit']        = max( 1, min( 200, $out['limit'] ) );
+		// Only sources that still exist (and, for "gh_pin", whose plugin is present).
+		$out['image_sources']    = array_values( array_intersect( $out['image_sources'], array_keys( WPPF_Image_Resolver::sources() ) ) );
+		$out['image_horizontal'] = 'use' === $out['image_horizontal'] ? 'use' : 'skip';
+		$out['image_missing']    = 'skip' === $out['image_missing'] ? 'skip' : 'generate';
 		$out['tax_relation'] = 'OR' === strtoupper( $out['tax_relation'] ) ? 'OR' : 'AND';
 		if ( empty( $out['post_types'] ) ) {
 			$out['post_types'] = array( 'post' );
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Feeds saved by 0.1–0.2 had a different image block: a "generate_mode"
+	 * (none | not_vertical | always), term/default picture sources and the
+	 * repository avatar as the "meta" source. Map them onto the current
+	 * fields once, on read, so old feeds keep working without a re-save.
+	 */
+	private static function migrate( array $raw ) {
+		if ( isset( $raw['generate_mode'] ) && ! isset( $raw['image_horizontal'] ) ) {
+			$mode                    = (string) $raw['generate_mode'];
+			$raw['image_horizontal'] = 'none' === $mode ? 'use' : 'skip';
+			$raw['image_missing']    = 'none' === $mode ? 'skip' : 'generate';
+		}
+		if ( isset( $raw['image_sources'] ) ) {
+			$sources = self::to_list( $raw['image_sources'] );
+			// The avatar is part of the site design, never a pin.
+			if ( '_gh_owner_avatar' === ( $raw['image_meta_key'] ?? '' ) ) {
+				$sources              = array_diff( $sources, array( 'meta' ) );
+				$raw['image_meta_key'] = '';
+				if ( ! in_array( 'gh_pin', $sources, true ) ) {
+					array_splice( $sources, (int) array_search( 'pin_meta', $sources, true ) + 1, 0, array( 'gh_pin' ) );
+				}
+			}
+			$raw['image_sources'] = array_values( array_diff( $sources, array( 'term', 'default' ) ) );
+		}
+		return $raw;
 	}
 
 	private static function to_list( $value ) {
@@ -426,7 +447,6 @@ class WPPF_Feed_Config {
 		unset( $post_types['attachment'] );
 		$taxonomies = get_taxonomies( array( 'public' => true ), 'objects' );
 		$profiles   = WPPF_Integrations::profiles();
-		$presets    = WPPF_Image_Presets::all();
 
 		echo '<div class="wppf-form">';
 
@@ -498,7 +518,6 @@ class WPPF_Feed_Config {
 		self::row_number( 'max_age_days', 'Не старше, дней', $c['max_age_days'], '0 — без ограничения.' );
 		self::row_number( 'min_age_minutes', 'Задержка публикации, минут', $c['min_age_minutes'], 'Свежая запись попадёт в ленту не раньше чем через N минут — успеют проставиться обложка и SEO-поля, а фоновая задача сгенерирует картинку и текст.' );
 		self::row_text( 'exclude_ids', 'Исключить ID записей', $c['exclude_ids'], 'Через запятую. Плюс у любой записи есть флажок «Не публиковать в Pinterest».' );
-		self::row_checkbox( 'require_image', 'Только с картинкой', $c['require_image'], 'Пин без картинки Pinterest не создаст — такие элементы лучше не отдавать вовсе.' );
 		echo '</table></div>';
 
 		// ---- text
@@ -539,8 +558,11 @@ class WPPF_Feed_Config {
 		echo '</table></div>';
 
 		// ---- image
-		echo '<div class="wppf-section"><h3>Картинка пина</h3><table class="form-table">';
-		echo '<tr><th>Источники по порядку</th><td>';
+		echo '<div class="wppf-section"><h3>Картинка пина</h3>';
+		echo '<p class="wppf-flow">Порядок: <strong>1)</strong> источники сверху вниз — берётся первое найденное изображение → <strong>2)</strong> горизонтальное изображение берётся или пропускается → <strong>3)</strong> если изображения нет — плагин генерирует инфографику (тезисы пишет модель) или запись не попадает в ленту.</p>';
+		echo '<table class="form-table">';
+
+		echo '<tr><th>1. Источники изображения</th><td>';
 		echo '<ul class="wppf-sortable">';
 		$all_sources = WPPF_Image_Resolver::sources();
 		$order       = array_merge( $c['image_sources'], array_diff( array_keys( $all_sources ), $c['image_sources'] ) );
@@ -549,79 +571,45 @@ class WPPF_Feed_Config {
 				continue;
 			}
 			$checked = in_array( $source, $c['image_sources'], true );
-			echo '<li data-source="' . esc_attr( $source ) . '"><span class="dashicons dashicons-menu"></span><label><input type="checkbox" name="wppf[image_sources][]" value="' . esc_attr( $source ) . '"' . checked( $checked, true, false ) . '> ' . esc_html( $all_sources[ $source ] ) . '</label></li>';
+			echo '<li data-source="' . esc_attr( $source ) . '"><span class="dashicons dashicons-menu"></span><label><input type="checkbox" name="wppf[image_sources][]" value="' . esc_attr( $source ) . '"' . checked( $checked, true, false ) . '> <strong>' . esc_html( $all_sources[ $source ]['label'] ) . '</strong><br><span class="description">' . esc_html( $all_sources[ $source ]['help'] ) . '</span></label>';
+			if ( 'meta' === $source ) {
+				echo '<br><input type="text" class="regular-text code" name="wppf[image_meta_key]" value="' . esc_attr( $c['image_meta_key'] ) . '" placeholder="мета-ключ">';
+			}
+			echo '</li>';
 		}
 		echo '</ul><input type="hidden" name="wppf[image_sources_order]" class="wppf-sortable-order" value="' . esc_attr( implode( ',', $order ) ) . '">';
-		echo '<p class="description">Перетаскивайте строки. Берётся первая найденная картинка; она же служит фоном, если пин генерируется.</p></td></tr>';
+		echo '<p class="description">Перетаскивайте строки, чтобы поменять порядок; снимите флажок, чтобы источник не использовался.</p></td></tr>';
 
-		echo '<tr><th>Таксономии для «картинки термина»</th><td>';
-		foreach ( $taxonomies as $tax ) {
-			if ( ! in_array( $tax->name, WPPF_Settings::term_image_taxonomies(), true ) ) {
-				continue;
-			}
-			$checked = in_array( $tax->name, $c['image_term_taxonomies'], true );
-			echo '<label class="wppf-inline"><input type="checkbox" name="wppf[image_term_taxonomies][]" value="' . esc_attr( $tax->name ) . '"' . checked( $checked, true, false ) . '> ' . esc_html( $tax->labels->singular_name ) . ' <code>' . esc_html( $tax->name ) . '</code></label>';
-		}
-		echo '<p class="description">Ничего не отмечено — любая таксономия записи. В автоленте термина первой проверяется картинка самого термина.</p></td></tr>';
-
-		self::row_text( 'image_meta_key', 'Мета-ключ картинки', $c['image_meta_key'], 'Для источника «Мета-поле»: в поле лежит ID вложения или URL. Например <code>_gh_owner_avatar</code> у репозиториев.' );
-
-		echo '<tr><th>Картинка по умолчанию</th><td>';
-		self::media_field( 'wppf[default_image_id]', $c['default_image_id'] );
-		echo '</td></tr>';
-
-		echo '<tr><th>Генерировать вертикальный пин</th><td><select name="wppf[generate_mode]">';
+		echo '<tr><th>2. Горизонтальные изображения</th><td>';
 		foreach ( array(
-			'none'         => 'Нет — отдавать найденную картинку как есть',
-			'not_vertical' => 'Если найденная картинка не вертикальная (рекомендуется)',
-			'always'       => 'Всегда',
+			'skip' => 'Пропускать — искать в следующем источнике, иначе генерировать',
+			'use'  => 'Брать как есть',
 		) as $v => $l ) {
-			echo '<option value="' . esc_attr( $v ) . '"' . selected( $c['generate_mode'], $v, false ) . '>' . esc_html( $l ) . '</option>';
+			echo '<label class="wppf-block"><input type="radio" name="wppf[image_horizontal]" value="' . esc_attr( $v ) . '"' . checked( $c['image_horizontal'], $v, false ) . '> ' . esc_html( $l ) . '</label>';
 		}
-		echo '</select><p class="description">Pinterest лучше всего показывает пины 2:3 (1000×1500). Горизонтальная обложка в ленте теряется.</p></td></tr>';
+		echo '<p class="description">Горизонтальное — шире, чем высота (например, обложка 1200×800). Pinterest лучше показывает вертикальные 2:3. Изображение из блока «Pinterest» записи берётся всегда — его выбрали вручную.</p></td></tr>';
 
-		echo '<tr><th>Формат пина</th><td><select name="wppf[pin_style]">';
+		echo '<tr><th>3. Если изображения нет</th><td>';
 		foreach ( array(
-			'infographic' => 'Инфографика: заголовок + тезисы (как в статьях)',
-			'cover'       => 'Обложка: картинка + заголовок',
+			'generate' => 'Сгенерировать инфографику',
+			'skip'     => 'Не включать запись в ленту',
 		) as $v => $l ) {
-			echo '<option value="' . esc_attr( $v ) . '"' . selected( $c['pin_style'], $v, false ) . '>' . esc_html( $l ) . '</option>';
+			echo '<label class="wppf-block"><input type="radio" name="wppf[image_missing]" value="' . esc_attr( $v ) . '"' . checked( $c['image_missing'], $v, false ) . '> ' . esc_html( $l ) . '</label>';
 		}
-		echo '</select><p class="description">Если тезисов набралось меньше трёх, вместо инфографики собирается обложка.</p></td></tr>';
+		echo '<p class="description">Инфографика: заголовок и нумерованные тезисы. Тезисы — из блока «Pinterest» записи, иначе их пишет модель по тексту записи (в фоне, ключи — в «Настройках»). Пока модель не ответила, если она недоступна или текста в записи мало — запись в ленту не попадает.';
+		if ( ! WPPF_Settings::llm_ready() ) {
+			echo ' <span class="wppf-warn">Ключи модели не заполнены — генерация не сработает.</span>';
+		}
+		echo '</p></td></tr>';
 
-		echo '<tr class="wppf-subhead"><th colspan="2">Инфографика</th></tr>';
 		echo '<tr><th>Пресет инфографики</th><td><select name="wppf[infographic_preset]">';
 		foreach ( WPPF_Infographic_Presets::all() as $id => $preset ) {
 			echo '<option value="' . esc_attr( $id ) . '"' . selected( $c['infographic_preset'], $id, false ) . '>' . esc_html( $preset['name'] . ' (' . WPPF_Infographic_Presets::layouts()[ $preset['layout'] ] . ')' ) . '</option>';
 		}
-		echo '</select> <a href="' . esc_url( admin_url( 'admin.php?page=' . WPPF_Admin::PRESETS_SLUG . '&type=infographic' ) ) . '">Пресеты</a></td></tr>';
-		echo '<tr><th>Откуда тезисы</th><td><select name="wppf[infographic_source]">';
-		foreach ( WPPF_Infographic::sources() as $v => $l ) {
-			echo '<option value="' . esc_attr( $v ) . '"' . selected( $c['infographic_source'], $v, false ) . '>' . esc_html( $l ) . '</option>';
-		}
-		echo '</select><p class="description">Структура: тезисы из метабокса записи → блок «Коротко» (llm-agent-articles) и другие сводные списки → заголовки H2 → самый длинный список. Модель пишет тезисы в фоне, с учётом размера блока в пресете; ключи — в «Настройках», язык и требования — в разделе LLM выше.</p></td></tr>';
+		echo '</select> <a href="' . esc_url( admin_url( 'admin.php?page=' . WPPF_Admin::PRESETS_SLUG ) ) . '">Пресеты</a></td></tr>';
 		self::row_number( 'infographic_points', 'Тезисов', $c['infographic_points'], '3–8. На 2:3 с телефона хорошо читаются 5.' );
-		self::row_text( 'infographic_title', 'Заголовок инфографики', $c['infographic_title'], 'Подпись внизу — общая, поле ниже.' );
-
-		echo '<tr class="wppf-subhead"><th colspan="2">Обложка (и запасной вариант)</th></tr>';
-		echo '<tr><th>Пресет обложки</th><td><select name="wppf[image_preset]">';
-		foreach ( $presets as $id => $preset ) {
-			echo '<option value="' . esc_attr( $id ) . '"' . selected( $c['image_preset'], $id, false ) . '>' . esc_html( $preset['name'] . ' (' . $preset['width'] . '×' . $preset['height'] . ')' ) . '</option>';
-		}
-		echo '</select> <a href="' . esc_url( admin_url( 'admin.php?page=' . WPPF_Admin::PRESETS_SLUG . '&type=cover' ) ) . '">Пресеты</a></td></tr>';
-
-		self::row_checkbox( 'generate_without_source', 'Обложка без исходной картинки', $c['generate_without_source'], 'Если ни один источник ничего не дал — собрать текстовую обложку на фоне пресета. Инфографике картинка не нужна.' );
-		self::row_text( 'caption_template', 'Текст на обложке', $c['caption_template'], 'Те же подстановки, что для текста.' );
-		self::row_text( 'footer_template', 'Подпись внизу', $c['footer_template'], 'Для инфографики и обложки. Обычно домен сайта. Пусто — без подписи.' );
-
-		echo '<tr><th>Пока пин не собран</th><td><select name="wppf[pending_fallback]">';
-		foreach ( array(
-			'source' => 'Отдать исходную картинку',
-			'skip'   => 'Не включать элемент, пока картинка не готова',
-		) as $v => $l ) {
-			echo '<option value="' . esc_attr( $v ) . '"' . selected( $c['pending_fallback'], $v, false ) . '>' . esc_html( $l ) . '</option>';
-		}
-		echo '</select><p class="description">Pinterest создаёт пин один раз и потом картинку не обновляет. «Не включать» надёжнее: элемент появится в ленте уже с готовым пином.</p></td></tr>';
+		self::row_text( 'infographic_title', 'Заголовок инфографики', $c['infographic_title'], 'Те же подстановки, что для текста пина.' );
+		self::row_text( 'footer_template', 'Подпись внизу', $c['footer_template'], 'Обычно домен сайта. Пусто — без подписи.' );
 		echo '</table></div>';
 
 		echo '</div>';

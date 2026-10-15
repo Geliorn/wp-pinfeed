@@ -437,9 +437,9 @@ class WPPF_Infographic_Composer extends WPPF_Image_Composer {
 
 		foreach ( $fit['cells'] as $i => $cell ) {
 			if ( $preset['plate_enabled'] ) {
-				self::rounded_rect( $canvas, $cell['x'], $cell['y'], $cell['x'] + $cell['w'], $cell['y'] + $cell['h'], (int) $preset['plate_radius'], WPPF_Image_Presets::hex_to_rgb( $preset['plate_color'] ), (int) $preset['plate_alpha'] );
+				self::rounded_rect( $canvas, $cell['x'], $cell['y'], $cell['x'] + $cell['w'], $cell['y'] + $cell['h'], (int) $preset['plate_radius'], WPPF_Image_Util::hex_to_rgb( $preset['plate_color'] ), (int) $preset['plate_alpha'] );
 				if ( (int) $preset['plate_border_width'] > 0 ) {
-					self::stroke_rounded_rect( $canvas, $cell['x'], $cell['y'], $cell['x'] + $cell['w'], $cell['y'] + $cell['h'], (int) $preset['plate_radius'], (int) $preset['plate_border_width'], WPPF_Image_Presets::hex_to_rgb( $preset['plate_border_color'] ) );
+					self::stroke_rounded_rect( $canvas, $cell['x'], $cell['y'], $cell['x'] + $cell['w'], $cell['y'] + $cell['h'], (int) $preset['plate_radius'], (int) $preset['plate_border_width'], WPPF_Image_Util::hex_to_rgb( $preset['plate_border_color'] ) );
 				}
 			}
 
@@ -480,7 +480,7 @@ class WPPF_Infographic_Composer extends WPPF_Image_Composer {
 
 	private static function draw_badge( $canvas, array $preset, $font, $number, $x, $y, $size ) {
 		$style = $preset['badge_style'];
-		$bg    = WPPF_Image_Presets::hex_to_rgb( $preset['badge_bg'], array( 230, 0, 35 ) );
+		$bg    = WPPF_Image_Util::hex_to_rgb( $preset['badge_bg'], array( 230, 0, 35 ) );
 		$fg    = self::colour( $canvas, $preset['badge_color'], '#ffffff' );
 
 		imagealphablending( $canvas, true );
@@ -581,7 +581,7 @@ class WPPF_Infographic_Composer extends WPPF_Image_Composer {
 	}
 
 	private static function colour( $canvas, $hex, $fallback ) {
-		$rgb = WPPF_Image_Presets::hex_to_rgb( $hex, WPPF_Image_Presets::hex_to_rgb( $fallback ) );
+		$rgb = WPPF_Image_Util::hex_to_rgb( $hex, WPPF_Image_Util::hex_to_rgb( $fallback ) );
 		return imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], 0 );
 	}
 

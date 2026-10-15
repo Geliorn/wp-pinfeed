@@ -36,9 +36,9 @@ class WPPF_Post_Meta {
 	public static function render( $post ) {
 		wp_nonce_field( 'wppf_post_meta', 'wppf_post_meta_nonce' );
 
-		echo '<p><strong>Картинка пина</strong></p>';
+		echo '<p><strong>Изображение для пина</strong></p>';
 		WPPF_Feed_Config::media_field( 'wppf_pin_image', (int) get_post_meta( $post->ID, self::IMAGE, true ) );
-		echo '<p class="description">Вертикальная 1000×1500. Если источник «Картинка Pinterest у записи» стоит в ленте первым — пин возьмёт её как есть.</p>';
+		echo '<p class="description">Лучше вертикальное 1000×1500. Используется в лентах, где включён источник «Изображение из блока «Pinterest» записи», и берётся как есть.</p>';
 
 		echo '<p><label for="wppf-pin-title"><strong>Заголовок пина</strong></label><br>';
 		echo '<input type="text" id="wppf-pin-title" class="widefat" maxlength="100" name="wppf_pin_title" value="' . esc_attr( (string) get_post_meta( $post->ID, self::TITLE, true ) ) . '"></p>';
@@ -49,7 +49,7 @@ class WPPF_Post_Meta {
 
 		echo '<p><label for="wppf-theses"><strong>Тезисы для инфографики</strong></label><br>';
 		echo '<textarea id="wppf-theses" class="widefat" rows="5" name="wppf_theses" placeholder="Метка: тезис одним предложением">' . esc_textarea( (string) get_post_meta( $post->ID, self::THESES, true ) ) . '</textarea></p>';
-		echo '<p class="description">По пункту на строку, «Метка: текст» или просто текст. Пусто — тезисы возьмутся из структуры записи или от модели.</p>';
+		echo '<p class="description">По пункту на строку, «Метка: текст» или просто текст. Нужны, только если пин генерируется. Пусто — тезисы напишет модель.</p>';
 
 		echo '<p><label><input type="checkbox" name="wppf_exclude" value="1"' . checked( '1', (string) get_post_meta( $post->ID, self::EXCLUDE, true ), false ) . '> Не публиковать в Pinterest</label></p>';
 	}

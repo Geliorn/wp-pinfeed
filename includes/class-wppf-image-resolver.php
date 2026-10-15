@@ -4,57 +4,109 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Finds the picture of a pin by walking the feed's ordered source chain.
- * The first hit wins; it is either served as is or used as the background
- * of a composed pin (WPPF_Pin_Builder decides which).
+ * Finds the picture of a pin by walking the feed's ordered source list.
+ * The first acceptable hit wins and is served as is. "Acceptable": a
+ * wider-than-tall picture is skipped when the feed says so — then the next
+ * source is tried, and with nothing left WPPF_Pin_Builder generates an
+ * infographic (or leaves the post out).
  */
 class WPPF_Image_Resolver {
 
-	/** A picture at least this much taller than wide counts as "already vertical". */
-	const VERTICAL_RATIO = 1.25;
-
+	/**
+	 * Available sources: key => array( label, help ). "gh_pin" is listed only
+	 * when llm-agent-github-repos is present.
+	 */
 	public static function sources() {
 		$sources = array(
-			'pin_meta'  => 'Картинка Pinterest у записи (метабокс) — всегда как есть',
-			'thumbnail' => 'Миниатюра записи (featured image)',
-			'term'      => 'Картинка термина («Изображение для Pinterest»)',
-			'content'   => 'Первая картинка в тексте записи',
-			'meta'      => 'Мета-поле записи (ID вложения или URL)',
-			'default'   => 'Картинка по умолчанию этой ленты',
+			'pin_meta'  => array(
+				'label' => 'Изображение из блока «Pinterest» записи',
+				'help'  => 'Выбирается вручную на экране редактирования записи. Берётся всегда, даже горизонтальное.',
+			),
+			'gh_pin'    => array(
+				'label' => 'Готовый пин из плагина «GitHub-репозитории»',
+				'help'  => 'Картинка 1000×1500, которую llm-agent-github-repos собирает для Pinterest (_gh_pin_image_id). На сайте не выводится.',
+			),
+			'thumbnail' => array(
+				'label' => 'Изображение записи (миниатюра)',
+				'help'  => 'Featured image. У статей llm-agent-articles — обложка или инфографика статьи.',
+			),
+			'content'   => array(
+				'label' => 'Первое изображение в тексте записи',
+				'help'  => 'Первая картинка в содержимом записи.',
+			),
+			'meta'      => array(
+				'label' => 'Мета-поле записи',
+				'help'  => 'Произвольное поле, где лежит ID вложения или URL картинки. Ключ — в поле ниже.',
+			),
 		);
 
+		if ( ! WPPF_Integrations::has_github_repos() ) {
+			unset( $sources['gh_pin'] );
+		}
+
 		/**
-		 * Extra image sources: key => label. Resolve them on wppf_image_source.
+		 * Extra image sources: key => array( 'label' => ..., 'help' => ... )
+		 * (a plain string label works too). Resolve them on wppf_image_source.
 		 *
 		 * @param array $sources
 		 */
-		return (array) apply_filters( 'wppf_image_sources', $sources );
+		$sources = (array) apply_filters( 'wppf_image_sources', $sources );
+		foreach ( $sources as $key => $source ) {
+			if ( ! is_array( $source ) ) {
+				$sources[ $key ] = array(
+					'label' => (string) $source,
+					'help'  => '',
+				);
+			}
+		}
+		return $sources;
 	}
 
 	/**
-	 * @return array{source:string,attachment_id:int,url:string,width:int,height:int}|null
+	 * Walks the sources in order.
+	 *
+	 * @return array{found:array|null,skipped:array}
+	 *         found   — the picture to serve (with 'source'), or null;
+	 *         skipped — horizontal pictures passed over (first one may serve
+	 *                   as an infographic background).
 	 */
 	public static function find( WP_Post $post, array $config ) {
+		$skipped = array();
+
 		foreach ( $config['image_sources'] as $source ) {
 			$found = self::from_source( $source, $post, $config );
-			if ( $found && '' !== $found['url'] ) {
-				$found['source'] = $source;
-				return $found;
+			if ( ! $found || '' === $found['url'] ) {
+				continue;
 			}
+			$found['source'] = $source;
+
+			// A picture picked by hand is never second-guessed.
+			if ( 'pin_meta' !== $source && 'skip' === $config['image_horizontal'] && self::is_horizontal( $found ) ) {
+				$skipped[] = $found;
+				continue;
+			}
+			return array(
+				'found'   => $found,
+				'skipped' => $skipped,
+			);
 		}
-		return null;
+
+		return array(
+			'found'   => null,
+			'skipped' => $skipped,
+		);
 	}
 
-	private static function from_source( $source, WP_Post $post, array $config ) {
+	public static function from_source( $source, WP_Post $post, array $config ) {
 		switch ( $source ) {
 			case 'pin_meta':
 				return self::attachment( (int) get_post_meta( $post->ID, WPPF_Post_Meta::IMAGE, true ) );
 
+			case 'gh_pin':
+				return self::attachment( (int) get_post_meta( $post->ID, '_gh_pin_image_id', true ) );
+
 			case 'thumbnail':
 				return self::attachment( (int) get_post_thumbnail_id( $post ) );
-
-			case 'term':
-				return self::attachment( self::term_image_id( $post, $config ) );
 
 			case 'content':
 				return self::from_content( $post );
@@ -68,9 +120,6 @@ class WPPF_Image_Resolver {
 					return self::attachment( (int) $value );
 				}
 				return self::url( (string) $value );
-
-			case 'default':
-				return self::attachment( (int) $config['default_image_id'] );
 		}
 
 		/**
@@ -82,46 +131,6 @@ class WPPF_Image_Resolver {
 		 * @param array      $config
 		 */
 		return apply_filters( 'wppf_image_source', null, $source, $post, $config );
-	}
-
-	/**
-	 * The feed's own term first (auto feeds), then the post's terms in the
-	 * chosen taxonomies — deepest term first, so "MCP" beats its parent "AI".
-	 */
-	public static function term_image_id( WP_Post $post, array $config ) {
-		if ( ! empty( $config['term'] ) ) {
-			$id = WPPF_Term_Image::get( $config['term']->term_id );
-			if ( $id ) {
-				return $id;
-			}
-		}
-
-		$taxonomies = $config['image_term_taxonomies'] ? $config['image_term_taxonomies'] : get_object_taxonomies( $post->post_type );
-		$taxonomies = array_intersect( $taxonomies, WPPF_Settings::term_image_taxonomies() );
-
-		foreach ( $taxonomies as $taxonomy ) {
-			$terms = get_the_terms( $post, $taxonomy );
-			if ( ! $terms || is_wp_error( $terms ) ) {
-				continue;
-			}
-			usort( $terms, function ( $a, $b ) {
-				return count( get_ancestors( $b->term_id, $b->taxonomy, 'taxonomy' ) ) - count( get_ancestors( $a->term_id, $a->taxonomy, 'taxonomy' ) );
-			} );
-			foreach ( $terms as $term ) {
-				$id = WPPF_Term_Image::get( $term->term_id );
-				if ( $id ) {
-					return $id;
-				}
-				// Inherit from the nearest ancestor that has one.
-				foreach ( get_ancestors( $term->term_id, $taxonomy, 'taxonomy' ) as $ancestor ) {
-					$id = WPPF_Term_Image::get( $ancestor );
-					if ( $id ) {
-						return $id;
-					}
-				}
-			}
-		}
-		return 0;
 	}
 
 	private static function from_content( WP_Post $post ) {
@@ -175,11 +184,15 @@ class WPPF_Image_Resolver {
 		);
 	}
 
-	public static function is_vertical( array $found ) {
+	/**
+	 * Wider than tall. An external URL has no known size until downloaded —
+	 * it is not fetched just to decide, so it counts as not horizontal.
+	 */
+	public static function is_horizontal( array $found ) {
 		if ( $found['width'] < 1 || $found['height'] < 1 ) {
 			return false;
 		}
-		return $found['height'] / $found['width'] >= self::VERTICAL_RATIO;
+		return $found['width'] > $found['height'];
 	}
 
 	private static function cache_path( array $found ) {

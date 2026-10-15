@@ -9,9 +9,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * a list or a grid of blocks, badge, label, footer, logo), re-tuned for a
  * vertical 2:3 pin: 1000×1500, 5 points, larger type for a phone screen.
  *
- * Background field names (fit, focal, filters, tint, gradient, logo_*) match
- * WPPF_Image_Presets, because WPPF_Infographic_Composer hands them straight
- * to the inherited pipeline of WPPF_Image_Composer.
+ * Background field names (fit, focal, filters, tint, gradient, logo_*) are
+ * the ones WPPF_Image_Composer's pipeline reads, because
+ * WPPF_Infographic_Composer hands them straight to it.
  */
 class WPPF_Infographic_Presets {
 
@@ -267,7 +267,7 @@ class WPPF_Infographic_Presets {
 				case 'label_color':
 				case 'text_color':
 				case 'footer_color':
-					$out[ $key ] = WPPF_Image_Presets::sanitize_hex( $value, $default );
+					$out[ $key ] = WPPF_Image_Util::sanitize_hex( $value, $default );
 					break;
 				case 'layout':
 					$out[ $key ] = isset( self::layouts()[ $value ] ) ? $value : $default;
@@ -279,14 +279,14 @@ class WPPF_Infographic_Presets {
 					$out[ $key ] = isset( self::background_modes()[ $value ] ) ? $value : $default;
 					break;
 				case 'fit':
-					$out[ $key ] = isset( WPPF_Image_Presets::fit_modes()[ $value ] ) ? $value : $default;
+					$out[ $key ] = isset( WPPF_Image_Util::fit_modes()[ $value ] ) ? $value : $default;
 					break;
 				case 'focal':
 				case 'logo_position':
-					$out[ $key ] = isset( WPPF_Image_Presets::positions()[ $value ] ) ? $value : $default;
+					$out[ $key ] = isset( WPPF_Image_Util::positions()[ $value ] ) ? $value : $default;
 					break;
 				case 'gradient_direction':
-					$out[ $key ] = isset( WPPF_Image_Presets::gradient_directions()[ $value ] ) ? $value : $default;
+					$out[ $key ] = isset( WPPF_Image_Util::gradient_directions()[ $value ] ) ? $value : $default;
 					break;
 				case 'title_align':
 				case 'footer_align':

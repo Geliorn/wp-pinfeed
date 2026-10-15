@@ -4,19 +4,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Renders a vertical pin from a source picture (or none) + a preset.
+ * The GD toolkit the infographic pin is drawn with (WPPF_Infographic_Composer
+ * extends it): canvas, crop by focal point, filters, tint, gradient, logo,
+ * rounded plates, word wrap, font lookup and file output.
  *
- * Built on the same GD pipeline as LAA_Image_Composer in llm-agent-articles
- * (crop by focal point, filters, tint, gradient, logo, caption with autofit,
- * plate, shadow, border), reshaped for pins:
- *  - "split" layout: the picture takes the top N% of the canvas and the
- *    caption sits on a solid panel below — the usual Pinterest look, and the
- *    only way a 3:2 cover survives on a 2:3 canvas without losing most of it;
- *  - an accent bar above the caption and a footer line (domain, stars...);
- *  - no source at all = a text-only pin on the preset background.
- *
- * GD only, for the same reason as there: present with FreeType on every host
- * of the network, one implementation, one set of bugs.
+ * Ported from LAA_Image_Composer (llm-agent-articles). GD only, as there:
+ * present with FreeType on every host of the network, one implementation,
+ * one set of bugs.
  */
 class WPPF_Image_Composer {
 
@@ -35,88 +29,6 @@ class WPPF_Image_Composer {
 		return self::available() && function_exists( 'imagettftext' );
 	}
 
-	/**
-	 * @param array       $preset
-	 * @param string|null $source_path Absolute path to the picture, or null for a text-only pin.
-	 * @param string      $caption
-	 * @param string      $footer
-	 * @param string      $out_path
-	 * @return array{ok:bool,path:string,mime:string,error:string}
-	 */
-	public static function render( array $preset, $source_path, $caption, $footer, $out_path ) {
-		if ( ! self::available() ) {
-			return self::fail( 'Расширение GD недоступно — сборка пинов невозможна' );
-		}
-
-		$preset = wp_parse_args( $preset, WPPF_Image_Presets::schema() );
-		$width  = (int) $preset['width'];
-		$height = (int) $preset['height'];
-
-		$source = null;
-		if ( $source_path ) {
-			if ( ! is_readable( $source_path ) ) {
-				return self::fail( 'Исходная картинка не читается: ' . $source_path );
-			}
-			$source = @imagecreatefromstring( (string) file_get_contents( $source_path ) ); // phpcs:ignore
-			if ( ! $source ) {
-				return self::fail( 'Не удалось открыть картинку (неподдерживаемый формат): ' . basename( $source_path ) );
-			}
-		}
-
-		$canvas = self::new_canvas( $width, $height, $preset['background'] );
-
-		// Picture area and text area, by layout.
-		$split = $source && 'split' === $preset['layout'];
-		if ( $split ) {
-			$pic_h = (int) round( $height * (int) $preset['split_ratio'] / 100 );
-			$pic   = array( 0, 0, $width, $pic_h );
-			$text  = array( 0, $pic_h, $width, $height - $pic_h );
-			self::fill_rect( $canvas, $text, $preset['panel_color'] ? $preset['panel_color'] : $preset['background'] );
-		} else {
-			$pic  = array( 0, 0, $width, $height );
-			$text = $pic;
-		}
-
-		if ( $source ) {
-			$layer = self::new_canvas( $pic[2], $pic[3], $preset['background'] );
-			self::draw_source( $layer, $source, $preset );
-			imagedestroy( $source );
-			self::apply_filters( $layer, $preset );
-			self::apply_tint( $layer, $preset );
-			imagealphablending( $canvas, true );
-			imagecopy( $canvas, $layer, $pic[0], $pic[1], 0, 0, $pic[2], $pic[3] );
-			imagedestroy( $layer );
-		}
-
-		self::apply_gradient( $canvas, $preset );
-		self::apply_logo( $canvas, $preset );
-
-		$notes = array();
-		$font  = self::resolve_font( $preset );
-		if ( ! self::text_available() ) {
-			$notes[] = 'GD собран без FreeType — текст на пине не нанесён';
-		} elseif ( '' === $font ) {
-			$notes[] = 'Не найден TTF-шрифт — пин собран без текста';
-		} else {
-			$footer_h = 0;
-			if ( $preset['footer_enabled'] && '' !== trim( (string) $footer ) ) {
-				$footer_h = self::apply_footer( $canvas, $preset, $font, $footer, $text );
-			}
-			if ( $preset['caption_enabled'] && '' !== trim( (string) $caption ) ) {
-				self::apply_caption( $canvas, $preset, $font, $caption, $text, $footer_h );
-			}
-		}
-
-		self::apply_border( $canvas, $preset );
-
-		$saved = self::save( $canvas, $preset, $out_path );
-		imagedestroy( $canvas );
-
-		if ( $saved['ok'] ) {
-			$saved['error'] = implode( '; ', $notes );
-		}
-		return $saved;
-	}
 
 	// --------------------------------------------------------------- canvas
 
@@ -125,7 +37,7 @@ class WPPF_Image_Composer {
 		imagealphablending( $canvas, false );
 		imagesavealpha( $canvas, true );
 
-		$rgb = WPPF_Image_Presets::hex_to_rgb( $background, array( 17, 24, 39 ) );
+		$rgb = WPPF_Image_Util::hex_to_rgb( $background, array( 17, 24, 39 ) );
 		$bg  = imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], self::GD_OPAQUE );
 		imagefilledrectangle( $canvas, 0, 0, $width - 1, $height - 1, $bg );
 
@@ -133,12 +45,6 @@ class WPPF_Image_Composer {
 		return $canvas;
 	}
 
-	/** @param array $rect x, y, w, h */
-	protected static function fill_rect( $canvas, array $rect, $hex ) {
-		$rgb   = WPPF_Image_Presets::hex_to_rgb( $hex, array( 17, 24, 39 ) );
-		$color = imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], self::GD_OPAQUE );
-		imagefilledrectangle( $canvas, $rect[0], $rect[1], $rect[0] + $rect[2] - 1, $rect[1] + $rect[3] - 1, $color );
-	}
 
 	/** Scales the source to cover (and crops by the focal point) or to contain. */
 	protected static function draw_source( $canvas, $source, array $preset ) {
@@ -224,7 +130,7 @@ class WPPF_Image_Composer {
 		if ( $alpha < 1 || '' === $preset['tint_hex'] ) {
 			return;
 		}
-		$rgb   = WPPF_Image_Presets::hex_to_rgb( $preset['tint_hex'] );
+		$rgb   = WPPF_Image_Util::hex_to_rgb( $preset['tint_hex'] );
 		$color = imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], self::alpha_to_gd( $alpha ) );
 		imagealphablending( $canvas, true );
 		imagefilledrectangle( $canvas, 0, 0, imagesx( $canvas ) - 1, imagesy( $canvas ) - 1, $color );
@@ -238,8 +144,8 @@ class WPPF_Image_Composer {
 		$w = imagesx( $canvas );
 		$h = imagesy( $canvas );
 
-		$from     = WPPF_Image_Presets::hex_to_rgb( $preset['gradient_from_hex'] );
-		$to       = WPPF_Image_Presets::hex_to_rgb( $preset['gradient_to_hex'] );
+		$from     = WPPF_Image_Util::hex_to_rgb( $preset['gradient_from_hex'] );
+		$to       = WPPF_Image_Util::hex_to_rgb( $preset['gradient_to_hex'] );
 		$from_a   = (int) $preset['gradient_from_alpha'];
 		$to_a     = (int) $preset['gradient_to_alpha'];
 		$vertical = in_array( $preset['gradient_direction'], array( 'to-bottom', 'to-top' ), true );
@@ -347,152 +253,7 @@ class WPPF_Image_Composer {
 
 	// ----------------------------------------------------------------- text
 
-	/**
-	 * Footer: one line, shrunk (never cut) to fit the width.
-	 *
-	 * @return int vertical space it takes from the bottom of the text area
-	 *             (height + offset), so a bottom caption can sit above it.
-	 */
-	private static function apply_footer( $canvas, array $preset, $font, $footer, array $area ) {
-		$footer = trim( wp_strip_all_tags( (string) $footer ) );
-		if ( $preset['footer_uppercase'] ) {
-			$footer = mb_strtoupper( $footer );
-		}
 
-		$size      = (int) $preset['footer_size'];
-		$max_width = $area[2] - 2 * (int) $preset['footer_offset_x'];
-		while ( $size > 10 && self::text_width( $font, $size, $footer ) > $max_width ) {
-			$size -= 1;
-		}
-
-		$metrics = imagettfbbox( $size, 0, $font, self::METRIC_SAMPLE );
-		$ascent  = $metrics ? abs( $metrics[7] ) : (int) round( $size * 0.8 );
-		$line_h  = (int) round( $size * 1.3 );
-		$line_w  = self::text_width( $font, $size, $footer );
-
-		list( $x, $y ) = self::place( $preset['footer_position'], $area[2], $area[3], $line_w, $line_h, (int) $preset['footer_offset_x'], (int) $preset['footer_offset_y'] );
-
-		$rgb   = WPPF_Image_Presets::hex_to_rgb( $preset['footer_color'], array( 203, 213, 225 ) );
-		$color = imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], self::GD_OPAQUE );
-		imagealphablending( $canvas, true );
-		imagettftext( $canvas, $size, 0, $area[0] + $x, $area[1] + $y + $ascent, $color, $font, $footer );
-
-		return 0 === strpos( (string) $preset['footer_position'], 'bottom' ) ? $line_h + (int) $preset['footer_offset_y'] : 0;
-	}
-
-	private static function apply_caption( $canvas, array $preset, $font, $caption, array $area, $footer_h ) {
-		$caption = trim( wp_strip_all_tags( (string) $caption ) );
-		if ( $preset['caption_uppercase'] ) {
-			$caption = mb_strtoupper( $caption );
-		}
-
-		$cw        = imagesx( $canvas );
-		$max_width = (int) round( $cw * (int) $preset['caption_max_width'] / 100 );
-		$max_width = min( $max_width, $area[2] - 2 * (int) $preset['caption_offset_x'] );
-		$max_lines = (int) $preset['caption_max_lines'];
-
-		$accent_h = $preset['accent_enabled'] && (int) $preset['accent_height'] > 0 ? (int) $preset['accent_height'] : 0;
-		$accent_g = $accent_h ? max( 16, $accent_h * 3 ) : 0;
-
-		// The caption must also fit the *height* of its area: on a split pin
-		// the panel is short, and a 5-line caption at 64px would run off it.
-		$offset_y   = (int) $preset['caption_offset_y'];
-		$avail_h    = $area[3] - 2 * $offset_y - $footer_h - $accent_h - $accent_g;
-		$size       = (int) $preset['caption_size'];
-		$min        = (int) $preset['caption_min_size'];
-		$lh_factor  = (float) $preset['caption_line_height'];
-		$lines      = self::wrap( $font, $size, $caption, $max_width );
-
-		if ( $preset['caption_autofit'] ) {
-			while ( $size > $min && ( count( $lines ) > $max_lines || count( $lines ) * $size * $lh_factor > $avail_h ) ) {
-				$size -= 2;
-				$lines = self::wrap( $font, $size, $caption, $max_width );
-			}
-		}
-
-		$fit_lines = max( 1, min( $max_lines, (int) floor( $avail_h / max( 1, $size * $lh_factor ) ) ) );
-		if ( count( $lines ) > $fit_lines ) {
-			$lines                   = array_slice( $lines, 0, $fit_lines );
-			$lines[ $fit_lines - 1 ] = rtrim( $lines[ $fit_lines - 1 ], " \t.,;:-" ) . '…';
-		}
-
-		$line_height = max( 1, (int) round( $size * $lh_factor ) );
-		$block_w     = 0;
-		foreach ( $lines as $line ) {
-			$block_w = max( $block_w, self::text_width( $font, $size, $line ) );
-		}
-		$text_h  = $line_height * count( $lines );
-		$block_h = $text_h + $accent_h + $accent_g;
-
-		$metrics = imagettfbbox( $size, 0, $font, self::METRIC_SAMPLE );
-		$ascent  = $metrics ? abs( $metrics[7] ) : (int) round( $size * 0.8 );
-
-		$is_bottom = 0 === strpos( (string) $preset['caption_position'], 'bottom' );
-		list( $bx, $by ) = self::place(
-			$preset['caption_position'],
-			$area[2],
-			$area[3] - ( $is_bottom ? $footer_h : 0 ),
-			$block_w,
-			$block_h,
-			(int) $preset['caption_offset_x'],
-			$offset_y
-		);
-		$bx += $area[0];
-		$by += $area[1];
-
-		imagealphablending( $canvas, true );
-
-		if ( $preset['plate_enabled'] ) {
-			$pad = (int) $preset['plate_padding'];
-			self::rounded_rect( $canvas, $bx - $pad, $by - $pad, $bx + $block_w + $pad, $by + $block_h + $pad, (int) $preset['plate_radius'], WPPF_Image_Presets::hex_to_rgb( $preset['plate_color'] ), (int) $preset['plate_alpha'] );
-		}
-
-		if ( $accent_h ) {
-			$aw = (int) $preset['accent_width'];
-			switch ( $preset['caption_align'] ) {
-				case 'center':
-					$ax = $bx + (int) round( ( $block_w - $aw ) / 2 );
-					break;
-				case 'right':
-					$ax = $bx + $block_w - $aw;
-					break;
-				default:
-					$ax = $bx;
-			}
-			$rgb = WPPF_Image_Presets::hex_to_rgb( $preset['accent_color'], array( 230, 0, 35 ) );
-			imagefilledrectangle( $canvas, $ax, $by, $ax + $aw - 1, $by + $accent_h - 1, imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], self::GD_OPAQUE ) );
-		}
-
-		$text_rgb   = WPPF_Image_Presets::hex_to_rgb( $preset['caption_color'], array( 255, 255, 255 ) );
-		$text_color = imagecolorallocatealpha( $canvas, $text_rgb[0], $text_rgb[1], $text_rgb[2], self::GD_OPAQUE );
-
-		$shadow_color = null;
-		if ( $preset['shadow_enabled'] && (int) $preset['shadow_alpha'] > 0 ) {
-			$shadow_rgb   = WPPF_Image_Presets::hex_to_rgb( $preset['shadow_color'] );
-			$shadow_color = imagecolorallocatealpha( $canvas, $shadow_rgb[0], $shadow_rgb[1], $shadow_rgb[2], self::alpha_to_gd( (int) $preset['shadow_alpha'] ) );
-		}
-
-		$text_top = $by + $accent_h + $accent_g;
-		foreach ( $lines as $i => $line ) {
-			$line_w = self::text_width( $font, $size, $line );
-			switch ( $preset['caption_align'] ) {
-				case 'center':
-					$x = $bx + (int) round( ( $block_w - $line_w ) / 2 );
-					break;
-				case 'right':
-					$x = $bx + ( $block_w - $line_w );
-					break;
-				default:
-					$x = $bx;
-			}
-			$y = $text_top + $ascent + $i * $line_height;
-
-			if ( $shadow_color ) {
-				imagettftext( $canvas, $size, 0, $x + (int) $preset['shadow_offset_x'], $y + (int) $preset['shadow_offset_y'], $shadow_color, $font, $line );
-			}
-			imagettftext( $canvas, $size, 0, $x, $y, $text_color, $font, $line );
-		}
-	}
 
 	public static function text_width( $font, $size, $text ) {
 		if ( '' === $text ) {
@@ -641,29 +402,6 @@ class WPPF_Image_Composer {
 
 	// ------------------------------------------------------- frame & output
 
-	protected static function apply_border( $canvas, array $preset ) {
-		$width = (int) $preset['border_width'];
-		if ( $width < 1 ) {
-			return;
-		}
-
-		$inset = (int) $preset['border_inset'];
-		$rgb   = WPPF_Image_Presets::hex_to_rgb( $preset['border_color'], array( 255, 255, 255 ) );
-		$color = imagecolorallocatealpha( $canvas, $rgb[0], $rgb[1], $rgb[2], self::GD_OPAQUE );
-
-		$x1 = $inset;
-		$y1 = $inset;
-		$x2 = imagesx( $canvas ) - 1 - $inset;
-		$y2 = imagesy( $canvas ) - 1 - $inset;
-		if ( $x2 <= $x1 || $y2 <= $y1 ) {
-			return;
-		}
-
-		imagealphablending( $canvas, true );
-		for ( $i = 0; $i < $width; $i++ ) {
-			imagerectangle( $canvas, $x1 + $i, $y1 + $i, $x2 - $i, $y2 - $i, $color );
-		}
-	}
 
 	/** Filled rectangle with rounded corners, on its own layer so the arcs don't double-blend. */
 	protected static function rounded_rect( $canvas, $x1, $y1, $x2, $y2, $radius, array $rgb, $alpha_pct ) {

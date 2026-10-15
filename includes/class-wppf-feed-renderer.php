@@ -190,7 +190,7 @@ class WPPF_Feed_Renderer {
 			$img    = $pin['image'] ? '<img src="' . esc_url( $pin['image']['url'] ) . '" alt="" loading="lazy">' : '<div class="noimg">нет картинки</div>';
 			$status = array(
 				'ready'   => '<span class="ok">в ленте</span>',
-				'pending' => '<span class="wait">в ленте, пин ещё собирается</span>',
+				'pending' => '<span class="wait">пин ещё собирается</span>',
 				'skip'    => '<span class="skip">не попадёт в ленту</span>',
 			);
 			$rows .= '<article class="pin">' . $img . '<div class="body">';

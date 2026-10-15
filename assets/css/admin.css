@@ -114,3 +114,19 @@
 .wppf-type-tabs {
 	margin: 12px 0 4px;
 }
+.wppf-flow {
+	background: #f0f6fc;
+	border-left: 4px solid #2271b1;
+	padding: 8px 12px;
+	margin: 12px 0 0;
+}
+.wppf-block {
+	display: block;
+	margin: 0 0 6px;
+}
+.wppf-sortable li label {
+	flex: 1;
+}
+.wppf-sortable li .description {
+	font-size: 12px;
+}
